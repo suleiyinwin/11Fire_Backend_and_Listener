@@ -6,14 +6,25 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 	"github.com/gorilla/websocket"
 	"os/exec"
 )
 
 func main() {
+	for {
+		runListener()
+		log.Println("Disconnected from backend, retrying in 5 seconds...")
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func runListener() {
+	// Connect to backend WebSocket server (bootstrap node endpoint)
 	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9091", nil)
 	if err != nil {
-		log.Fatal("dial:", err)
+		log.Println("Connection failed:", err)
+		return
 	}
 	defer conn.Close()
 	log.Println("Connected to backend")
@@ -21,15 +32,15 @@ func main() {
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
-			break
+			log.Println("read error:", err)
+			break // trigger reconnect
 		}
 
 		msg := string(message)
 		if strings.HasPrefix(msg, "upload|") {
 			parts := strings.SplitN(msg, "|", 4)
 			if len(parts) < 4 {
-				log.Println("invalid upload message format")
+				log.Println("Invalid upload message format")
 				continue
 			}
 
@@ -40,18 +51,18 @@ func main() {
 			tempPath := "/tmp/" + filename
 			err := saveBase64ToFile(filedata, tempPath)
 			if err != nil {
-				log.Println("file write error:", err)
+				log.Println("File write error:", err)
 				continue
 			}
 
 			cid, err := uploadToIPFS(tempPath)
 			if err != nil {
-				log.Println("ipfs upload failed:", err)
+				log.Println("IPFS upload failed:", err)
 				continue
 			}
 
 			conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("cid|%s|%s", requestId, cid)))
-			log.Println("Sent CID:", cid)
+			log.Println("Uploaded to IPFS, CID:", cid)
 
 			os.Remove(tempPath)
 		}
