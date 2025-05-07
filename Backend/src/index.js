@@ -6,7 +6,7 @@ dotenv.config();
 
 import express from 'express';
 const app = express();
-const port = process.env.HTTP_PORT || 3000;
+const port = process.env.HTTP_PORT || 3001;
 
 // REST API server
 app.use(express.json());
