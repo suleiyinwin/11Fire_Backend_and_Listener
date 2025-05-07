@@ -5,8 +5,12 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express from 'express';
+import cors from 'cors';
 const app = express();
-const port = process.env.HTTP_PORT || 3001;
+const port = process.env.HTTP_PORT || 3000;
+
+// Enable CORS for all origins (or configure as needed)
+app.use(cors());
 
 // REST API server
 app.use(express.json());
