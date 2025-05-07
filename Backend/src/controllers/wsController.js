@@ -34,7 +34,13 @@ function handleConnection(ws, wss) {
         } catch (err) {
             console.log(`Error pinging ${providerInfo.id}:`, err.message);
         }
-    }, 15000);
+    }, PING_INTERVAL);
+
+    // Check provider liveness every - seconds
+    setInterval(() => {
+        replicateIfDead();
+    }, REPLICATION_INTERVAL);
+
 
     // Handle incoming messages from the client
     ws.on('message', (message) => {
@@ -65,9 +71,5 @@ function handleConnection(ws, wss) {
     });
 }
 
-// Schedule dead peer detection and replication check every 10 seconds
-setInterval(() => {
-    replicateIfDead();
-}, 10000);
 
 export default { handleConnection };
