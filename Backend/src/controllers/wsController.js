@@ -53,7 +53,7 @@ function handleConnection(ws, wss) {
             // Update provider CIDs and broadcast
             if (cidList.length > 0 && cidList[0] !== "error" && cidList[0].trim() !== "") {
                 providerInfo.cids = cidList;
-                console.log(`${providerInfo.id} has pinned:`, cidList);
+                // console.log(`${providerInfo.id} has pinned:`, cidList);
                 broadcaster.broadcastUpdate(wss, providerInfo.id, cidList);
             } else {
                 console.log(`${providerInfo.id} failed to report pinned CIDs or returned empty list`);

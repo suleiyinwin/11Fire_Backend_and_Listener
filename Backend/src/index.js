@@ -6,8 +6,15 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
+import mongoose from 'mongoose';
 const app = express();
 const port = process.env.HTTP_PORT || 3001;
+
+// MongoDB Connection
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/11fire', {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+}).then(() => console.log('MongoDB connected')).catch(err => console.error('MongoDB connection error:', err));
 
 // Enable CORS for all origins (or configure as needed)
 app.use(cors());
