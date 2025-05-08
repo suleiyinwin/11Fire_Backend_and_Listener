@@ -10,13 +10,13 @@ export async function replicateIfDead() {
         const { lastSeen, cids: lostCIDs, id } = info;
 
         // Detect offline peers
-        if (now - lastSeen > REPLICATION_INTERVAL) {
+        if (now - lastSeen > 3000) {
             console.log(`${id} is offline (no response in 3s)`);
 
             // Get online peers for replication
             const otherProviders = Array.from(providers.entries()).filter(
                 ([otherWs, otherInfo]) =>
-                    otherWs !== ws && (now - otherInfo.lastSeen < REPLICATION_INTERVAL)
+                    otherWs !== ws && (now - otherInfo.lastSeen < 3000)
             );
 
             if (otherProviders.length === 0) {

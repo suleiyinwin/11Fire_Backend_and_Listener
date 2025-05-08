@@ -34,12 +34,12 @@ function handleConnection(ws, wss) {
         } catch (err) {
             console.log(`Error pinging ${providerInfo.id}:`, err.message);
         }
-    }, PING_INTERVAL);
+    }, 1000);
 
     // Check provider liveness every - seconds
     setInterval(() => {
         replicateIfDead();
-    }, REPLICATION_INTERVAL);
+    }, 3000);
 
 
     // Handle incoming messages from the client
