@@ -1,34 +1,34 @@
 import bootstrapController from './bootstrapController.js';
+import FileModel from '../models/FileModel.js';
+import ProviderModel from '../models/providerModel.js';
+// import * as broadcaster from '../utils/broadcaster.js';
 
-// Map to keep track of pending file uploads by requestId
 let pendingUploads = new Map();
+let fileMetadata = new Map();
 
-/**
- * Handles file upload from frontend:
- * - Parses in-memory uploaded file from req.file
- * - Converts to base64
- * - Sends it to bootstrap node via WebSocket
- * - Stores response handler to reply with CID when received
- */
 function handleUpload(req, res) {
     const file = req.file;
 
-    // If no file is present in the request
     if (!file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Convert in-memory buffer to base64 string
     const fileData = file.buffer.toString('base64');
     const requestId = Date.now().toString();
 
-    // Temporarily store the response to respond later with CID
+    // Store res to respond later
     pendingUploads.set(requestId, res);
 
-    // Get WebSocket connection to the bootstrap node
+    // Save metadata temporarily for MongoDB insert
+    fileMetadata.set(requestId, {
+        name: file.originalname,
+        size: file.size,
+        date: new Date().toISOString(),
+        isFile: true // future: handle folders
+    });
+
     const socket = bootstrapController.getSocket();
 
-    // If connected, send file to bootstrap node
     if (socket && socket.readyState === 1) {
         socket.send(`upload|${requestId}|${file.originalname}|${fileData}`);
     } else {
@@ -36,22 +36,50 @@ function handleUpload(req, res) {
     }
 }
 
-/**
- * Handles WebSocket message back from bootstrap node in the format:
- * cid|<requestId>|<cid>
- */
 function handleMessage(message) {
     const msg = message.toString();
 
     if (msg.startsWith('cid|')) {
         const [_, requestId, cid] = msg.split('|');
         const res = pendingUploads.get(requestId);
+        const meta = fileMetadata.get(requestId);
 
-        if (res) {
+        if (res && meta) {
+            // Save to MongoDB
+            FileModel.create({
+                name: meta.name,
+                cid,
+                size: meta.size,
+                date: meta.date,
+                isFile: meta.isFile,
+            }).then(() => console.log('File metadata saved')).catch(console.error);
+
+            // Replicate CID to all online providers
+            const providers = ProviderModel.getAll();
+            for (const [ws, info] of providers.entries()) {
+                if (ws.readyState === 1) {
+                    ws.send(`pin|${cid}`);
+                }
+            }
+
             res.json({ cid });
             pendingUploads.delete(requestId);
+            fileMetadata.delete(requestId);
         }
     }
 }
 
-export default { handleUpload, handleMessage };
+/**
+ * GET /api/files
+ * Returns all uploaded files stored in MongoDB
+ */
+async function listFiles(req, res) {
+    try {
+        const files = await FileModel.find().sort({ date: -1 });
+        res.json(files);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch files' });
+    }
+}
+
+export default { handleUpload, handleMessage, listFiles };

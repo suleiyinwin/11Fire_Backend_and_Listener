@@ -8,7 +8,7 @@ import (
     "github.com/gorilla/websocket"
 )
 
-var backendURL = "ws://34.143.147.155:9090" 
+var backendURL = "ws://localhost:9090" 
 
 func connectToBackend() {
     for {
