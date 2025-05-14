@@ -15,11 +15,9 @@ const createSwarm = async (req, res) => {
   }
 
   try {
-    // Generate swarm key
+    // Generate swarm key using js-ipfs-swarm-key-gen
     const swarmKeyObj = await generator();
     const key = swarmKeyObj.key;
-
-
 
     // Find available bootstrap
     const bootstrap = await Bootstrap.findOne({ isUsed: false });
@@ -33,7 +31,12 @@ const createSwarm = async (req, res) => {
       bootstrapId: bootstrap._id
     });
 
-    await Auth.findByIdAndUpdate(req.user.id, { $push: { swarms: swarm._id } });
+    await Auth.findByIdAndUpdate(req.user.id, {
+      $push: {
+        swarms: swarm._id,
+        roles: { swarm: swarm._id, tag: null }
+      }
+    });
     await Bootstrap.findByIdAndUpdate(bootstrap._id, { isUsed: true, swarm: swarm._id });
 
     // Send key to bootstrap node
@@ -64,7 +67,12 @@ const joinSwarm = async (req, res) => {
 
     // Add user to swarm and vice versa
     await Swarm.findByIdAndUpdate(swarmId, { $addToSet: { members: req.user.id } });
-    await Auth.findByIdAndUpdate(req.user.id, { $addToSet: { swarms: swarmId } });
+    await Auth.findByIdAndUpdate(req.user.id, {
+      $addToSet: {
+        swarms: swarmId,
+        roles: { swarm: swarmId, tag: null }
+      }
+    });
 
     res.json({ message: 'Joined swarm successfully' });
   } catch (err) {
