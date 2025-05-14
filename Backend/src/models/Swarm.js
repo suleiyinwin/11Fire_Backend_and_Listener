@@ -5,7 +5,7 @@ const swarmSchema = new mongoose.Schema({
   password: { type: String, required: true },
   isUsed: { type: Boolean, default: false },
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Auth' }],
-  bootstrapId: { type: mongoose.Schema.Types.ObjectId, ref: 'Auth' }
+  bootstrapId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bootstrap',required: false },
 });
 
 const Swarm = mongoose.model('Swarm', swarmSchema);
