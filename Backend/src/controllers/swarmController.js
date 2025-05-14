@@ -6,6 +6,7 @@ import Swarm from '../models/Swarm.js';
 import Bootstrap from '../models/Bootstrap.js';
 import Auth from '../models/Auth.js';
 import bootstrapController from './bootstrapController.js';
+import generator from 'js-ipfs-swarm-key-gen';
 
 const createSwarm = async (req, res) => {
   const { password } = req.body;
@@ -15,8 +16,10 @@ const createSwarm = async (req, res) => {
 
   try {
     // Generate swarm key
-    execSync('npx ipfs-swarm-key-gen > /tmp/swarm.key');
-    const key = fs.readFileSync('/tmp/swarm.key', 'utf8');
+    const swarmKeyObj = await generator();
+    const key = swarmKeyObj.key;
+
+
 
     // Find available bootstrap
     const bootstrap = await Bootstrap.findOne({ isUsed: false });
