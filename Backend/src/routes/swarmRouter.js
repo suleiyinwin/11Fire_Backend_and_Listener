@@ -4,5 +4,6 @@ const router = express.Router();
 
 router.post('/create', swarmController.createSwarm);
 router.post('/join', swarmController.joinSwarm);
+router.post('/role', swarmController.selectRole);
 
 export default router;

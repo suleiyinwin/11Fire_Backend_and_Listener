@@ -1,6 +1,3 @@
-import fs from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
 import bcrypt from 'bcryptjs';
 import Swarm from '../models/Swarm.js';
 import Bootstrap from '../models/Bootstrap.js';
@@ -81,4 +78,27 @@ const joinSwarm = async (req, res) => {
   }
 };
 
-export default { createSwarm, joinSwarm };
+const selectRole = async (req, res) => {
+    const { swarmId, tag } = req.body;
+    if (!swarmId || !['user', 'provider'].includes(tag)) {
+      return res.status(400).json({ error: 'Valid swarm ID and role tag are required' });
+    }
+  
+    try {
+      const user = await Auth.findById(req.user.id);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+  
+      const roleEntry = user.roles.find(r => r.swarm.toString() === swarmId);
+      if (!roleEntry) return res.status(400).json({ error: 'User is not part of the swarm' });
+  
+      roleEntry.tag = tag;
+      await user.save();
+  
+      res.json({ message: 'Role updated successfully' });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Failed to update role' });
+    }
+  };
+
+export default { createSwarm, joinSwarm, selectRole };
