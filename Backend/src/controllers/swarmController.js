@@ -46,4 +46,28 @@ const createSwarm = async (req, res) => {
   }
 };
 
-export default { createSwarm };
+const joinSwarm = async (req, res) => {
+  const { swarmId, password } = req.body;
+  if (!swarmId || !password) {
+    return res.status(400).json({ error: 'Swarm ID and password are required' });
+  }
+
+  try {
+    const swarm = await Swarm.findById(swarmId);
+    if (!swarm) return res.status(404).json({ error: 'Swarm not found' });
+
+    const match = await bcrypt.compare(password, swarm.password);
+    if (!match) return res.status(403).json({ error: 'Incorrect password' });
+
+    // Add user to swarm and vice versa
+    await Swarm.findByIdAndUpdate(swarmId, { $addToSet: { members: req.user.id } });
+    await Auth.findByIdAndUpdate(req.user.id, { $addToSet: { swarms: swarmId } });
+
+    res.json({ message: 'Joined swarm successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to join swarm' });
+  }
+};
+
+export default { createSwarm, joinSwarm };
