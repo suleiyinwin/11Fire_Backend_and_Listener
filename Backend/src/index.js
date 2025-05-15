@@ -18,7 +18,7 @@ dotenv.config();
 const app = express();
 const port = process.env.HTTP_PORT || 3001;
 
-mongoose.connect('mongodb+srv://suleiyinwin:ZOvaXv2S5ZNXt60J@11fire.fllqybd.mongodb.net/?retryWrites=true&w=majority&appName=11Fire' || 'mongodb://localhost:27017/11fire').then(() => console.log('MongoDB connected')).catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGODB_URI|| 'mongodb://localhost:27017/11fire').then(() => console.log('MongoDB connected')).catch(err => console.error('MongoDB connection error:', err));
 
 app.use(cors());
 app.use(express.json());
