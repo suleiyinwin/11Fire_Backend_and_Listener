@@ -1,21 +1,38 @@
-const bootstrapSockets = new Map();
+import uploadController from './uploadController.js';
 
-const setSocket = (ws) => {
-  ws.once('message', (msg) => {
+let bootstrapSocket = null;
+let currentPeerId = null;
+
+function setSocket(socket) {
+  bootstrapSocket = socket;
+
+  socket.on('message', (msg) => {
     const str = msg.toString();
-    if (str.startsWith("id|")) {
-      const peerId = str.slice(3);
-      bootstrapSockets.set(peerId, ws);
-      console.log(`Registered bootstrap node: ${peerId}`);
+    if (str.startsWith('id|')) {
+      currentPeerId = str.slice(3);
+      console.log('Bootstrap registered as peer:', currentPeerId);
+    } else {
+      uploadController.handleMessage(msg);
     }
   });
-};
 
-const getSocketById = (peerId) => {
-  return bootstrapSockets.get(peerId);
-};
+  socket.on('close', () => {
+    console.log('[BootstrapSocket] Bootstrap node disconnected');
+    bootstrapSocket = null;
+    currentPeerId = null;
+  });
+}
+
+function getSocket() {
+  return bootstrapSocket;
+}
+
+function getCurrentPeerId() {
+  return currentPeerId;
+}
 
 export default {
   setSocket,
-  getSocketById
+  getSocket,
+  getCurrentPeerId
 };

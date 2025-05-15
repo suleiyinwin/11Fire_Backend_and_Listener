@@ -3,84 +3,97 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/url"
 	"os"
-	"strings"
-	"time"
-	"github.com/gorilla/websocket"
 	"os/exec"
+	"strings"
+
+	"github.com/gorilla/websocket"
 )
 
-func main() {
-	for {
-		runListener()
-		log.Println("Disconnected from backend, retrying in 5 seconds...")
-		time.Sleep(5 * time.Second)
+const backendURL = "ws://localhost:9091/bootstrap-ws"
+
+func getPeerID() (string, error) {
+	cmd := exec.Command("ipfs", "id", "-f", "<id>")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
 	}
+	return strings.TrimSpace(string(output)), nil
 }
 
-func runListener() {
-	// Connect to backend WebSocket server (bootstrap node endpoint)
-	conn, _, err := websocket.DefaultDialer.Dial("ws://localhost:9091", nil)
+func uploadToIPFS(data []byte) (string, error) {
+	tmpFile, err := ioutil.TempFile("", "upload-*")
 	if err != nil {
-		log.Println("Connection failed:", err)
-		return
+		return "", err
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write(data); err != nil {
+		return "", err
+	}
+	tmpFile.Close()
+
+	cmd := exec.Command("ipfs", "add", "-Q", tmpFile.Name())
+	cidBytes, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(cidBytes)), nil
+}
+
+func main() {
+	u := url.URL{Scheme: "ws", Host: "localhost:9091", Path: "/bootstrap-ws"}
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("Dial error:", err)
 	}
 	defer conn.Close()
-	log.Println("Connected to backend")
+
+	// Send peer ID to backend
+	peerID, err := getPeerID()
+	if err != nil {
+		log.Fatal("Peer ID error:", err)
+	}
+	conn.WriteMessage(websocket.TextMessage, []byte("id|"+peerID))
+	fmt.Println("Connected to backend as:", peerID)
 
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("read error:", err)
-			break // trigger reconnect
+			log.Println("Read error:", err)
+			break
 		}
 
 		msg := string(message)
 		if strings.HasPrefix(msg, "upload|") {
 			parts := strings.SplitN(msg, "|", 4)
 			if len(parts) < 4 {
-				log.Println("Invalid upload message format")
+				log.Println("Invalid upload message")
 				continue
 			}
-
 			requestId := parts[1]
 			filename := parts[2]
-			filedata := parts[3]
+			base64Data := parts[3]
 
-			tempPath := "/tmp/" + filename
-			err := saveBase64ToFile(filedata, tempPath)
+			data, err := base64.StdEncoding.DecodeString(base64Data)
 			if err != nil {
-				log.Println("File write error:", err)
+				log.Println("Base64 decode error:", err)
 				continue
 			}
 
-			cid, err := uploadToIPFS(tempPath)
+			cid, err := uploadToIPFS(data)
 			if err != nil {
-				log.Println("IPFS upload failed:", err)
+				log.Println("Upload to IPFS failed:", err)
 				continue
 			}
 
-			conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("cid|%s|%s", requestId, cid)))
-			log.Println("Uploaded to IPFS, CID:", cid)
-
-			os.Remove(tempPath)
+			response := fmt.Sprintf("cid|%s|%s", requestId, cid)
+			conn.WriteMessage(websocket.TextMessage, []byte(response))
+			log.Printf("Uploaded %s as %s\n", filename, cid)
 		}
 	}
-}
-
-func saveBase64ToFile(encoded, path string) error {
-	data, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0644)
-}
-
-func uploadToIPFS(path string) (string, error) {
-	out, err := exec.Command("ipfs", "add", "-Q", path).Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
