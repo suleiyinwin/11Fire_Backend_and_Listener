@@ -95,5 +95,26 @@ func main() {
 			conn.WriteMessage(websocket.TextMessage, []byte(response))
 			log.Printf("Uploaded %s as %s\n", filename, cid)
 		}
+		if strings.HasPrefix(msg, "download|") {
+  parts := strings.Split(msg, "|")
+  if len(parts) != 3 {
+    log.Println("Invalid download message")
+    continue
+  }
+  requestId := parts[1]
+  cid := parts[2]
+
+  cmd := exec.Command("ipfs", "cat", cid)
+  out, err := cmd.Output()
+  if err != nil {
+    log.Println("ipfs cat failed:", err)
+    continue
+  }
+
+  encoded := base64.StdEncoding.EncodeToString(out)
+  response := fmt.Sprintf("file|%s|%s", requestId, encoded)
+  conn.WriteMessage(websocket.TextMessage, []byte(response))
+}
+
 	}
 }

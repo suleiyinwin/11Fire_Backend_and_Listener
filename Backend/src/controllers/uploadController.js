@@ -3,6 +3,7 @@ import FileModel from '../models/FileModel.js';
 import ProviderModel from '../models/providerModel.js';
 import Swarm from '../models/Swarm.js';
 import Bootstrap from '../models/Bootstrap.js';
+import { Buffer } from 'buffer';
 
 let pendingUploads = new Map();
 let fileMetadata = new Map();
@@ -92,5 +93,47 @@ async function listFiles(req, res) {
     res.status(500).json({ error: 'Failed to fetch files' });
   }
 }
+async function downloadFile(req, res) {
+  const { cid } = req.params;
+  const user = req.user;
+  const swarmId = req.headers['x-swarm-id'];
 
-export default { handleUpload, handleMessage, listFiles };
+  if (!cid || !swarmId) {
+    return res.status(400).json({ error: 'Missing CID or swarmId' });
+  }
+
+  const file = await FileModel.findOne({ cid, swarm: swarmId });
+  if (!file) return res.status(404).json({ error: 'File not found in your swarm' });
+
+  const socket = bootstrapController.getSocket();
+  const peerId = bootstrapController.getCurrentPeerId();
+
+  const swarm = await Swarm.findById(swarmId);
+  const bootstrap = await Bootstrap.findById(swarm.bootstrapId);
+
+  if (!socket || socket.readyState !== 1 || bootstrap.peerId !== peerId) {
+    return res.status(500).json({ error: 'Bootstrap not available' });
+  }
+
+  const requestId = Date.now().toString();
+  const listener = (msg) => {
+    const str = msg.toString();
+    if (str.startsWith(`file|${requestId}|`)) {
+      const base64 = str.split('|')[2];
+      socket.off('message', listener);
+
+      const buffer = Buffer.from(base64, 'base64');
+      res.set({
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${file.name}"`,
+        'Content-Length': buffer.length
+      });
+      return res.send(buffer);
+    }
+  };
+
+  socket.on('message', listener);
+  socket.send(`download|${requestId}|${cid}`);
+}
+
+export default { handleUpload, handleMessage, listFiles, downloadFile };

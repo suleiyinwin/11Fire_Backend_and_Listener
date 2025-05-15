@@ -9,5 +9,7 @@ const upload = multer({ storage });
 
 router.post('/upload', authMiddleware, upload.single('file'), uploadController.handleUpload);
 router.get('/files', authMiddleware, uploadController.listFiles);
+router.get('/download/:cid', authMiddleware, uploadController.downloadFile);
+
 
 export default router;
