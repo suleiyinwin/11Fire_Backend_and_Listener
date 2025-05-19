@@ -37,10 +37,10 @@ const createSwarm = async (req, res) => {
     await Bootstrap.findByIdAndUpdate(bootstrap._id, { isUsed: true, swarm: swarm._id });
 
     // Send key to bootstrap node
-    const socket = bootstrapController.getSocketById(bootstrap.peerId);
-    if (socket && socket.readyState === 1) {
-      socket.send(`swarmkey|${key}`);
-    }
+    // const socket = bootstrapController.getSocket(bootstrap.peerId);
+    // if (socket && socket.readyState === 1) {
+    //   socket.send(`swarmkey|${key}`);
+    // }
 
     res.json({ message: 'Swarm created', swarmId: swarm._id });
   } catch (err) {

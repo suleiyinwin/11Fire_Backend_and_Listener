@@ -136,4 +136,34 @@ async function downloadFile(req, res) {
   socket.send(`download|${requestId}|${cid}`);
 }
 
-export default { handleUpload, handleMessage, listFiles, downloadFile };
+async function deleteFile(req, res) {
+  const { cid } = req.params;
+  const user = req.user;
+  const swarmId = req.headers['x-swarm-id'];
+
+  if (!cid || !swarmId) return res.status(400).json({ error: 'Missing CID or swarm ID' });
+
+  const file = await FileModel.findOne({ cid, swarm: swarmId, ownerId: user.id });
+  if (!file) return res.status(404).json({ error: 'File not found or permission denied' });
+
+  await FileModel.deleteOne({ _id: file._id });
+
+  // Unpin from providers
+  const providers = ProviderModel.getAll();
+  for (const [ws] of providers.entries()) {
+    if (ws.readyState === 1) {
+      ws.send(`unpin|${cid}`);
+    }
+  }
+
+  // Unpin from bootstrap
+  const socket = bootstrapController.getSocket();
+  if (socket && socket.readyState === 1) {
+    socket.send(`unpin|${cid}`);
+  }
+
+  res.json({ message: 'File deleted and unpinned' });
+}
+
+
+export default { handleUpload, handleMessage, listFiles, downloadFile, deleteFile };

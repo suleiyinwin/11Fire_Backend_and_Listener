@@ -3,10 +3,6 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
-import fs from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
-
 import wsRouter from './routes/wsRouter.js';
 import uploadRouter from './routes/uploadRouter.js';
 import authRouter from './routes/authRouter.js';
