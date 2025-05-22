@@ -7,10 +7,11 @@ const fileSchema = new mongoose.Schema({
   date: Date,
   isFile: Boolean,
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Auth' },
-  storedId: { type: mongoose.Schema.Types.ObjectId, ref: 'Auth' },
+  storedIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Auth' }], 
   sharedIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Auth' }],
   swarm: { type: mongoose.Schema.Types.ObjectId, ref: 'Swarm' }
 });
+
 
 const FileModel = mongoose.model('File', fileSchema);
 export default FileModel;

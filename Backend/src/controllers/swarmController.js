@@ -62,14 +62,25 @@ const joinSwarm = async (req, res) => {
     const match = await bcrypt.compare(password, swarm.password);
     if (!match) return res.status(403).json({ error: 'Incorrect password' });
 
-    // Add user to swarm and vice versa
-    await Swarm.findByIdAndUpdate(swarmId, { $addToSet: { members: req.user.id } });
-    await Auth.findByIdAndUpdate(req.user.id, {
-      $addToSet: {
-        swarms: swarmId,
-        roles: { swarm: swarmId, tag: null }
-      }
-    });
+    // Check if user is already a member
+    const alreadyMember = swarm.members.includes(req.user.id);
+    const user = await Auth.findById(req.user.id);
+    const hasSwarm = user.swarms.includes(swarmId);
+    const hasRole = user.roles.some(r => r.swarm.toString() === swarmId);
+
+    if (!alreadyMember) {
+      await Swarm.findByIdAndUpdate(swarmId, { $addToSet: { members: req.user.id } });
+    }
+
+    const updates = {};
+    if (!hasSwarm) updates.$addToSet = { ...updates.$addToSet, swarms: swarmId };
+    if (!hasRole) {
+      updates.$addToSet = { ...updates.$addToSet, roles: { swarm: swarmId, tag: null } };
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await Auth.findByIdAndUpdate(req.user.id, updates);
+    }
 
     res.json({ message: 'Joined swarm successfully' });
   } catch (err) {
@@ -77,6 +88,7 @@ const joinSwarm = async (req, res) => {
     res.status(500).json({ error: 'Failed to join swarm' });
   }
 };
+
 
 const selectRole = async (req, res) => {
     const { swarmId, tag } = req.body;

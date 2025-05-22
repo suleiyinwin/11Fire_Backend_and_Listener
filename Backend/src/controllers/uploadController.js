@@ -40,7 +40,7 @@ async function handleUpload(req, res) {
     date: new Date().toISOString(),
     isFile: true,
     ownerId: user.id,
-    storedId: user.id,
+    storedIds: [],
     swarm: swarmId
   });
 
@@ -63,7 +63,7 @@ function handleMessage(message) {
         date: meta.date,
         isFile: meta.isFile,
         ownerId: meta.ownerId,
-        storedId: meta.storedId,
+        storedIds: meta.storedIds,
         swarm: meta.swarm
       }).then(() => console.log('File metadata saved')).catch(console.error);
 
