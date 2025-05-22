@@ -1,12 +1,15 @@
 import bootstrapController from './bootstrapController.js';
 import FileModel from '../models/FileModel.js';
 import ProviderModel from '../models/providerModel.js';
+import wsController from './wsController.js';
 import Swarm from '../models/Swarm.js';
 import Bootstrap from '../models/Bootstrap.js';
 import { Buffer } from 'buffer';
+import Auth from '../models/Auth.js';
 
 let pendingUploads = new Map();
 let fileMetadata = new Map();
+const providerMap = wsController.providerMap;
 
 async function handleUpload(req, res) {
   const file = req.file;
@@ -47,7 +50,7 @@ async function handleUpload(req, res) {
   socket.send(`upload|${requestId}|${file.originalname}|${fileData}`);
 }
 
-function handleMessage(message) {
+async function handleMessage(message) {
   const msg = message.toString();
 
   if (msg.startsWith('cid|')) {
@@ -56,22 +59,46 @@ function handleMessage(message) {
     const meta = fileMetadata.get(requestId);
 
     if (res && meta) {
-      FileModel.create({
+      // Save file first
+      const fileDoc = await FileModel.create({
         name: meta.name,
         cid,
         size: meta.size,
         date: meta.date,
         isFile: meta.isFile,
         ownerId: meta.ownerId,
-        storedIds: meta.storedIds,
+        storedIds: [],
         swarm: meta.swarm
-      }).then(() => console.log('File metadata saved')).catch(console.error);
+      });
 
-      const providers = ProviderModel.getAll();
-      for (const [ws, info] of providers.entries()) {
-        if (ws.readyState === 1) {
-          ws.send(`pin|${cid}`);
+      // Find providers in same swarm
+      const providersInSwarm = [];
+      for (const [ws, provider] of providerMap.entries()) {
+        if (provider.swarms.includes(meta.swarm)) {
+          providersInSwarm.push({ ws, provider });
         }
+      }
+
+      const selectedProviders = providersInSwarm.slice(0, 2);
+      const storedIds = [];
+
+      for (const { ws, provider } of selectedProviders) {
+        try {
+          ws.send(`pin|${cid}`);
+          const authUser = await Auth.findOne({ peerId: provider.id });
+          if (authUser) storedIds.push(authUser._id);
+        } catch (err) {
+          console.error(`Failed to pin to provider ${provider.id}:`, err);
+        }
+      }
+
+      // Update file document with provider IDs
+      fileDoc.storedIds = storedIds;
+      await fileDoc.save();
+
+      const socket = bootstrapController.getSocket();
+      if (socket && socket.readyState === 1) {
+        socket.send(`unpin|${cid}`);
       }
 
       res.json({ cid });
@@ -87,7 +114,7 @@ async function listFiles(req, res) {
   if (!swarmId) return res.status(400).json({ error: 'Missing swarm ID' });
 
   try {
-    const files = await FileModel.find({ ownerId:user.id,swarm: swarmId }).sort({ date: -1 });
+    const files = await FileModel.find({ ownerId: user.id, swarm: swarmId }).sort({ date: -1 });
     res.json(files);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch files' });
