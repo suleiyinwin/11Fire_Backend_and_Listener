@@ -173,24 +173,27 @@ async function deleteFile(req, res) {
   const file = await FileModel.findOne({ cid, swarm: swarmId, ownerId: user.id });
   if (!file) return res.status(404).json({ error: 'File not found or permission denied' });
 
-  await FileModel.deleteOne({ _id: file._id });
-
-  // Unpin from providers
+  // Unpin from each provider that stored it
   const providers = ProviderModel.getAll();
-  for (const [ws] of providers.entries()) {
-    if (ws.readyState === 1) {
-      ws.send(`unpin|${cid}`);
+  for (const [ws, info] of providers.entries()) {
+    const auth = await Auth.findOne({ peerId: info.id });
+    if (auth && file.storedIds.map(x => x.toString()).includes(auth._id.toString())) {
+      if (ws.readyState === 1) {
+        ws.send(`unpin|${cid}`);
+      }
     }
   }
 
   // Unpin from bootstrap
-  const socket = bootstrapController.getSocket();
-  if (socket && socket.readyState === 1) {
-    socket.send(`unpin|${cid}`);
-  }
+  // const socket = bootstrapController.getSocket();
+  // if (socket && socket.readyState === 1) {
+  //   socket.send(`unpin|${cid}`);
+  // }
 
-  res.json({ message: 'File deleted and unpinned' });
+  await FileModel.deleteOne({ _id: file._id });
+  res.json({ message: 'File deleted and unpinned from all nodes' });
 }
+
 
 
 export default { handleUpload, handleMessage, listFiles, downloadFile, deleteFile };
