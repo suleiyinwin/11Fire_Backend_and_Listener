@@ -16,8 +16,8 @@ func connectToBackend() {
 
         conn, _, err := websocket.DefaultDialer.Dial(backendURL, nil)
         if err != nil {
-            log.Println("Connection failed, retrying in 5 seconds:", err)
-            time.Sleep(5 * time.Second)
+            log.Println("Connection failed, retrying in 3 seconds:", err)
+            time.Sleep(3 * time.Second)
             continue
         }
 
