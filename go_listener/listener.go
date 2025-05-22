@@ -8,7 +8,7 @@ import (
     "github.com/gorilla/websocket"
 )
 
-var backendURL = "ws://10.4.56.85:9090" 
+var backendURL = "ws://10.4.56.85:9090"
 
 func connectToBackend() {
     for {
@@ -81,6 +81,21 @@ func connectToBackend() {
                 }
 
                 conn.WriteMessage(websocket.TextMessage, []byte(response))
+                continue
+            }
+
+            if strings.HasPrefix(msg, "unpin|") {
+                cid := msg[6:]
+                log.Println("Unpinning CID:", cid)
+
+                out, err := exec.Command("ipfs", "pin", "rm", cid).CombinedOutput()
+                response := "Success: " + string(out)
+                if err != nil {
+                    response = "Error: " + err.Error()
+                }
+
+                conn.WriteMessage(websocket.TextMessage, []byte(response))
+                continue
             }
         }
 
