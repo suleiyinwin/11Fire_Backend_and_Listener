@@ -1,110 +1,159 @@
 package main
 
 import (
-    "log"
-    "os/exec"
-    "strings"
-    "time"
-    "github.com/gorilla/websocket"
+	"encoding/base64"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/url"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
-var backendURL = "ws://10.4.56.85:9090"
+const backendHost = "10.4.56.85:9091"   
+const backendPath = "/"               
+const reconnectDelay = 3 * time.Second
 
-func connectToBackend() {
-    for {
-        log.Println("Connecting to backend...")
+func getPeerID() (string, error) {
+	cmd := exec.Command("ipfs", "id", "-f", "<id>")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
 
-        conn, _, err := websocket.DefaultDialer.Dial(backendURL, nil)
-        if err != nil {
-            log.Println("Connection failed, retrying in 3 seconds:", err)
-            time.Sleep(3 * time.Second)
-            continue
-        }
+func uploadToIPFS(data []byte) (string, error) {
+	tmp, err := ioutil.TempFile("", "upload-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tmp.Name())
 
-        log.Println("Connected to backend!")
+	if _, err := tmp.Write(data); err != nil {
+		return "", err
+	}
+	tmp.Close()
 
-        // Send PeerID after connecting
-        out, err := exec.Command("ipfs", "id", "-f=<id>").CombinedOutput()
-        if err != nil {
-            log.Println("Failed to get PeerID:", err)
-        } else {
-            peerID := strings.TrimSpace(string(out))
-            conn.WriteMessage(websocket.TextMessage, []byte("id|" + peerID))
-        }
+	cmd := exec.Command("ipfs", "add", "-Q", tmp.Name())
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
 
-        for {
-            _, message, err := conn.ReadMessage()
-            if err != nil {
-                log.Println("Lost connection to backend. Reconnecting...")
-                break
-            }
+func handleConnection(conn *websocket.Conn, peerID string) {
+	defer conn.Close()
 
-            msg := string(message)
-            log.Println("Received command:", msg)
+	// Register with peer ID
+	conn.WriteMessage(websocket.TextMessage, []byte("id|" + peerID))
+	log.Println("Connected to backend as", peerID)
 
-            if msg == "ping" {
-                out, err := exec.Command("ipfs", "pin", "ls", "--type=recursive").CombinedOutput()
-                if err != nil {
-                    conn.WriteMessage(websocket.TextMessage, []byte("cids|error"))
-                } else {
-                    lines := strings.Split(string(out), "\n")
-                    var cids []string
-                    for _, line := range lines {
-                        parts := strings.Fields(line)
-                        if len(parts) > 0 {
-                            cids = append(cids, parts[0])
-                        }
-                    }
-                    response := "cids|" + strings.Join(cids, ",")
-                    conn.WriteMessage(websocket.TextMessage, []byte(response))
-                }
-                continue
-            }
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("Read error:", err)
+			break
+		}
+		str := string(msg)
 
-            if strings.HasPrefix(msg, "pin|") {
-                cid := msg[4:]
-                log.Println("Pinning CID:", cid)
+		// === Upload ===
+		if strings.HasPrefix(str, "upload|") {
+			parts := strings.SplitN(str, "|", 4)
+			if len(parts) < 4 {
+				log.Println("Invalid upload message")
+				continue
+			}
+			requestId := parts[1]
+			base64Data := parts[3]
+			data, err := base64.StdEncoding.DecodeString(base64Data)
+			if err != nil {
+				log.Println("Base64 decode error:", err)
+				continue
+			}
+			cid, err := uploadToIPFS(data)
+			if err != nil {
+				log.Println("IPFS upload failed:", err)
+				continue
+			}
+			resp := fmt.Sprintf("cid|%s|%s", requestId, cid)
+			conn.WriteMessage(websocket.TextMessage, []byte(resp))
+			log.Printf("Uploaded file -> CID: %s\n", cid)
 
-                // Attempt to fetch before pinning
-                fetchCmd := exec.Command("ipfs", "get", cid)
-                fetchOut, fetchErr := fetchCmd.CombinedOutput()
-                if fetchErr != nil {
-                    log.Println("Failed to fetch CID:", fetchErr)
-                    conn.WriteMessage(websocket.TextMessage, []byte("Error: fetch failed " + string(fetchOut)))
-                    continue
-                }
+		// === Download ===
+		} else if strings.HasPrefix(str, "download|") {
+			parts := strings.Split(str, "|")
+			if len(parts) != 3 {
+				log.Println("Invalid download request")
+				continue
+			}
+			requestId := parts[1]
+			cid := parts[2]
 
-                out, err := exec.Command("ipfs", "pin", "add", cid).CombinedOutput()
-                response := "Success: " + string(out)
-                if err != nil {
-                    response = "Error: " + err.Error()
-                }
+			cmd := exec.Command("ipfs", "cat", cid)
+			out, err := cmd.Output()
+			if err != nil {
+				log.Println("ipfs cat failed:", err)
+				continue
+			}
 
-                conn.WriteMessage(websocket.TextMessage, []byte(response))
-                continue
-            }
+			encoded := base64.StdEncoding.EncodeToString(out)
+			resp := fmt.Sprintf("file|%s|%s", requestId, encoded)
+			conn.WriteMessage(websocket.TextMessage, []byte(resp))
+			log.Printf("Served download for CID %s", cid)
 
-            if strings.HasPrefix(msg, "unpin|") {
-                cid := msg[6:]
-                log.Println("Unpinning CID:", cid)
+		// === Unpin + GC ===
+		} else if strings.HasPrefix(str, "unpin|") {
+			cid := strings.TrimPrefix(str, "unpin|")
 
-                out, err := exec.Command("ipfs", "pin", "rm", cid).CombinedOutput()
-                response := "Success: " + string(out)
-                if err != nil {
-                    response = "Error: " + err.Error()
-                }
+			rm := exec.Command("ipfs", "pin", "rm", cid)
+			if out, err := rm.CombinedOutput(); err != nil {
+				log.Printf("pin rm failed: %v\n%s", err, string(out))
+			} else {
+				log.Println("Unpinned:", cid)
+			}
 
-                conn.WriteMessage(websocket.TextMessage, []byte(response))
-                continue
-            }
-        }
+			gc := exec.Command("ipfs", "repo", "gc")
+			if out, err := gc.CombinedOutput(); err != nil {
+				log.Printf("gc failed: %v\n%s", err, string(out))
+			} else {
+				log.Println("Ran GC")
+			}
+		}
+	}
+}
 
-        conn.Close()
-        log.Println("Reconnecting in 5 seconds...")
-        time.Sleep(5 * time.Second)
-    }
+func connectForever() {
+	for {
+		u := url.URL{Scheme: "ws", Host: backendHost, Path: backendPath}
+		log.Println("Connecting to", u.String())
+
+		conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		if err != nil {
+			log.Println("Dial failed:", err)
+			time.Sleep(reconnectDelay)
+			continue
+		}
+
+		peerID, err := getPeerID()
+		if err != nil {
+			log.Println("Peer ID error:", err)
+			conn.Close()
+			time.Sleep(reconnectDelay)
+			continue
+		}
+
+		handleConnection(conn, peerID)
+		log.Println("Reconnecting in", reconnectDelay)
+		time.Sleep(reconnectDelay)
+	}
 }
 
 func main() {
-    connectToBackend()
+	connectForever()
 }
