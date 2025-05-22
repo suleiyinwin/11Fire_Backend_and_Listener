@@ -29,11 +29,9 @@ const createSwarm = async (req, res) => {
     });
 
     await Auth.findByIdAndUpdate(req.user.id, {
-      $push: {
-        swarms: swarm._id,
-        roles: { swarm: swarm._id, tag: null }
-      }
+      $addToSet: { swarms: swarm._id }
     });
+
     await Bootstrap.findByIdAndUpdate(bootstrap._id, { isUsed: true, swarm: swarm._id });
 
     // Send key to bootstrap node
@@ -66,7 +64,6 @@ const joinSwarm = async (req, res) => {
     const alreadyMember = swarm.members.includes(req.user.id);
     const user = await Auth.findById(req.user.id);
     const hasSwarm = user.swarms.includes(swarmId);
-    const hasRole = user.roles.some(r => r.swarm.toString() === swarmId);
 
     if (!alreadyMember) {
       await Swarm.findByIdAndUpdate(swarmId, { $addToSet: { members: req.user.id } });
@@ -74,9 +71,6 @@ const joinSwarm = async (req, res) => {
 
     const updates = {};
     if (!hasSwarm) updates.$addToSet = { ...updates.$addToSet, swarms: swarmId };
-    if (!hasRole) {
-      updates.$addToSet = { ...updates.$addToSet, roles: { swarm: swarmId, tag: null } };
-    }
 
     if (Object.keys(updates).length > 0) {
       await Auth.findByIdAndUpdate(req.user.id, updates);
@@ -90,27 +84,30 @@ const joinSwarm = async (req, res) => {
 };
 
 
-const selectRole = async (req, res) => {
-    const { swarmId, tag } = req.body;
-    if (!swarmId || !['user', 'provider'].includes(tag)) {
-      return res.status(400).json({ error: 'Valid swarm ID and role tag are required' });
-    }
-  
-    try {
-      const user = await Auth.findById(req.user.id);
-      if (!user) return res.status(404).json({ error: 'User not found' });
-  
-      const roleEntry = user.roles.find(r => r.swarm.toString() === swarmId);
-      if (!roleEntry) return res.status(400).json({ error: 'User is not part of the swarm' });
-  
-      roleEntry.tag = tag;
-      await user.save();
-  
-      res.json({ message: 'Role updated successfully' });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Failed to update role' });
-    }
-  };
+const setRole = async (req, res) => {
+  const { role } = req.body;
+  console.log(role);
+  if (!['user', 'provider'].includes(role)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
 
-export default { createSwarm, joinSwarm, selectRole };
+  try {
+    const user = await Auth.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (user.role) {
+      return res.status(400).json({ error: 'Role already set' });
+    }
+
+    user.role = role;
+    await user.save();
+
+    res.json({ message: 'Role set successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to set role' });
+  }
+};
+
+
+export default { createSwarm, joinSwarm, setRole };

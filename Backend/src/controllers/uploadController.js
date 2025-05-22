@@ -87,7 +87,7 @@ async function listFiles(req, res) {
   if (!swarmId) return res.status(400).json({ error: 'Missing swarm ID' });
 
   try {
-    const files = await FileModel.find({ swarm: swarmId }).sort({ date: -1 });
+    const files = await FileModel.find({ ownerId:user.id,swarm: swarmId }).sort({ date: -1 });
     res.json(files);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch files' });

@@ -7,13 +7,16 @@ let providerCounter = 0;
 // Handles a new WebSocket connection
 function handleConnection(ws, wss) {
     let tempID = `provider_${++providerCounter}`;
-    console.log(`Temporary connection from ${tempID}`);
+    // console.log(`Temporary connection from ${tempID}`);
 
     // Initialize provider metadata
     const providerInfo = {
-        id: tempID,
-        lastSeen: Date.now(),
-        cids: []
+        peerId: null,
+        username: null,
+        swarmId: null,
+        cids: [],
+        freeSpace: null,
+        lastSeen: Date.now()
     };
 
     ProviderModel.set(ws, providerInfo);
