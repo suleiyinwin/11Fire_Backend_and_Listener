@@ -14,7 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const backendHost = "localhost:9091"   
+const backendHost = "10.4.56.85:9091"   
 const backendPath = "/"               
 const reconnectDelay = 3 * time.Second
 
