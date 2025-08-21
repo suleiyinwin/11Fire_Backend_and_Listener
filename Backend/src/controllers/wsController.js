@@ -111,8 +111,7 @@ function handleConnection(ws, wss) {
 
             console.log(`Found ${files.length} matching files:`, files.map(f => f.name));
 
-            const swarmId = provider.swarms[0];
-
+            
 
 
             // Broadcast with real username and file names
@@ -120,8 +119,7 @@ function handleConnection(ws, wss) {
                 type: 'update',
                 id: provider.id,
                 username: auth?.username || provider.id,
-                files: files.map(f => ({ cid: f.cid, name: f.name })),
-                swarmId : swarmId
+                files: files.map(f => ({ cid: f.cid, name: f.name }))
             });
         }
     });
