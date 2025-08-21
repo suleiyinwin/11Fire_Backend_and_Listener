@@ -96,10 +96,10 @@ async function handleMessage(message) {
       fileDoc.storedIds = storedIds;
       await fileDoc.save();
 
-      const socket = bootstrapController.getSocket();
-      if (socket && socket.readyState === 1) {
-        socket.send(`unpin|${cid}`);
-      }
+      // const socket = bootstrapController.getSocket();
+      // if (socket && socket.readyState === 1) {
+      //   socket.send(`unpin|${cid}`);
+      // }
 
       res.json({ cid });
       pendingUploads.delete(requestId);
