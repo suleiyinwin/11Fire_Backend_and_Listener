@@ -3,12 +3,17 @@ import Swarm from '../models/Swarm.js';
 import Bootstrap from '../models/Bootstrap.js';
 import Auth from '../models/Auth.js';
 import bootstrapController from './bootstrapController.js';
+import { upsertMembershipForUser } from '../utils/membershipUtils.js';
 import generator from 'js-ipfs-swarm-key-gen';
 
 const createSwarm = async (req, res) => {
-  const { password } = req.body;
+  const { password, role } = req.body;
   if (!password || password.length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  if (!['user', 'provider'].includes(role)) {
+    return res.status(400).json({ error: 'Valid role (user|provider) required' });
   }
 
   try {
@@ -24,33 +29,45 @@ const createSwarm = async (req, res) => {
     const swarm = await Swarm.create({
       swarmkey: key,
       password: hashed,
-      members: [req.user.id],
+      members: [req.user.uid],
       bootstrapId: bootstrap._id
     });
 
-    await Auth.findByIdAndUpdate(req.user.id, {
+    // Link this swarm to user's swarms[] (legacy)
+    await Auth.findByIdAndUpdate(req.user.uid, {
       $addToSet: { swarms: swarm._id }
     });
 
-    await Bootstrap.findByIdAndUpdate(bootstrap._id, { isUsed: true, swarm: swarm._id });
+    // Assign membership (role per swarm)
+    const user = await Auth.findById(req.user.uid);
+    await upsertMembershipForUser(user, { swarmId: swarm._id, role });
+
+    // Mark bootstrap node as used
+    await Bootstrap.findByIdAndUpdate(bootstrap._id, {
+      isUsed: true,
+      swarm: swarm._id,
+    });
 
     // Send key to bootstrap node
     // const socket = bootstrapController.getSocket(bootstrap.peerId);
     // if (socket && socket.readyState === 1) {
     //   socket.send(`swarmkey|${key}`);
     // }
+    // Optionally notify bootstrap socket (disabled)
+    // const socket = bootstrapController.getSocket(bootstrap.peerId);
+    // if (socket?.readyState === 1) socket.send(`swarmkey|${key}`);
 
     res.json({ message: 'Swarm created', swarmId: swarm._id });
   } catch (err) {
-    console.error(err);
+    console.error('Swarm creation failed:', err);
     res.status(500).json({ error: 'Swarm creation failed' });
   }
 };
 
 const joinSwarm = async (req, res) => {
-  const { swarmId, password } = req.body;
-  if (!swarmId || !password) {
-    return res.status(400).json({ error: 'Swarm ID and password are required' });
+  const { swarmId, password, role } = req.body;
+  if (!swarmId || !password || !['user', 'provider'].includes(role)) {
+    return res.status(400).json({ error: 'swarmId, password, and valid role are required' });
   }
 
   try {
@@ -60,25 +77,26 @@ const joinSwarm = async (req, res) => {
     const match = await bcrypt.compare(password, swarm.password);
     if (!match) return res.status(403).json({ error: 'Incorrect password' });
 
+    const user = await Auth.findById(req.user.uid);
+
     // Check if user is already a member
-    const alreadyMember = swarm.members.includes(req.user.id);
-    const user = await Auth.findById(req.user.id);
-    const hasSwarm = user.swarms.includes(swarmId);
+    const isAlreadyInSwarms = user.swarms.includes(swarmId);
+    const isAlreadyMember = swarm.members.includes(req.user.uid);
 
-    if (!alreadyMember) {
-      await Swarm.findByIdAndUpdate(swarmId, { $addToSet: { members: req.user.id } });
+    if (!isAlreadyInSwarms) {
+      await Auth.findByIdAndUpdate(req.user.uid, { $addToSet: { swarms: swarmId } });
     }
 
-    const updates = {};
-    if (!hasSwarm) updates.$addToSet = { ...updates.$addToSet, swarms: swarmId };
-
-    if (Object.keys(updates).length > 0) {
-      await Auth.findByIdAndUpdate(req.user.id, updates);
+    if (!isAlreadyMember) {
+      await Swarm.findByIdAndUpdate(swarmId, { $addToSet: { members: req.user.uid } });
     }
+
+    // Upsert membership with role
+    await upsertMembershipForUser(user, { swarmId, role });
 
     res.json({ message: 'Joined swarm successfully' });
   } catch (err) {
-    console.error(err);
+    console.error('Join swarm failed:', err);
     res.status(500).json({ error: 'Failed to join swarm' });
   }
 };
@@ -86,13 +104,13 @@ const joinSwarm = async (req, res) => {
 
 const setRole = async (req, res) => {
   const { role } = req.body;
-  console.log(role);
+  // console.log(role);
   if (!['user', 'provider'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role' });
   }
 
   try {
-    const user = await Auth.findById(req.user.id);
+    const user = await Auth.findById(req.user.uid);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (user.role) {
@@ -104,7 +122,7 @@ const setRole = async (req, res) => {
 
     res.json({ message: 'Role set successfully' });
   } catch (err) {
-    console.error(err);
+    console.error('Set role failed:', err);
     res.status(500).json({ error: 'Failed to set role' });
   }
 };
