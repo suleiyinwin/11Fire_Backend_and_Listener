@@ -1,6 +1,7 @@
 import Auth from '../models/Auth.js';
 import { msalClient } from '../lib/msalClient.js';
 import { issueSession, updateSession, clearSession } from '../utils/session.js';
+import { upsertMembershipForUser } from '../utils/membershipUtils.js';
 
 
 const BASE_SCOPES = ['openid', 'profile', 'email'];
@@ -51,3 +52,20 @@ export async function callback(req, res, next) {
     return res.redirect(process.env.POST_LOGIN_REDIRECT || '/');
   } catch (err) { next(err); }
 }
+
+export async function upsertMembership(req, res, next) {
+  try {
+    const { swarmId, role, quotaBytes } = req.body || {};
+    if (!swarmId || !['user', 'provider'].includes(role)) {
+      return res.status(400).json({ error: 'swarmId and valid role are required' });
+    }
+
+    const user = await Auth.findById(req.user.uid);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    await upsertMembershipForUser(user, { swarmId, role, quotaBytes });
+
+    res.json({ ok: true, memberships: user.memberships });
+  } catch (err) { next(err); }
+}
+
