@@ -4,10 +4,14 @@ const COOKIE_NAME = "sid";
 
 export function attachUser(req, _res, next) {
   const token = req.cookies?.[COOKIE_NAME];
+  // console.log("Incoming cookies:", req.cookies);
   if (!token) return next();
   try {
     req.user = jwt.verify(token, process.env.APP_JWT_SECRET);
-  } catch (_) {}
+    console.log("Decoded JWT:", req.user); 
+  } catch (err) {
+    console.error("JWT verification failed:", err);
+  }
   next();
 }
 
