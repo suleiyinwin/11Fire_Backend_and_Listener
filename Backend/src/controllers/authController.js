@@ -1,39 +1,53 @@
 import Auth from '../models/Auth.js';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { msalClient } from '../lib/msalClient.js';
+import { issueSession, updateSession, clearSession } from '../utils/session.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecret';
 
-const signup = async (req, res) => {
-  const { email, password, username } = req.body;
+const BASE_SCOPES = ['openid', 'profile', 'email'];
+
+export async function startLogin(_req, res, next) {
   try {
-    const exists = await Auth.findOne({ email });
-    if (exists) return res.status(400).json({ error: 'Email already registered' });
+    const url = await msalClient.getAuthCodeUrl({
+      scopes: BASE_SCOPES,
+      redirectUri: process.env.AZURE_REDIRECT_URI,
+    });
+    res.redirect(url);
+  } catch (err) { next(err); }
+}
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await Auth.create({ email, password: hashedPassword, username });
-
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '2d' });
-    res.json({ token, user: { id: user._id, username: user.username } });
-  } catch (err) {
-    res.status(500).json({ error: 'Signup failed' });
-  }
-};
-
-const login = async (req, res) => {
-  const { email, password } = req.body;
+export async function callback(req, res, next) {
   try {
-    const user = await Auth.findOne({ email });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { code } = req.query; //Receives the code from Microsoft.
+    if (!code) return res.status(400).json({ error: 'Missing authorization code' });
 
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(403).json({ error: 'Invalid credentials' });
+    //exchange code for tokens and user info (idTokenClaims).
+    const tokenResp = await msalClient.acquireTokenByCode({
+      code,
+      scopes: BASE_SCOPES,
+      redirectUri: process.env.AZURE_REDIRECT_URI,
+    });
 
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '2d' });
-    res.json({ token, user: { id: user._id, username: user.username } });
-  } catch (err) {
-    res.status(500).json({ error: 'Login failed' });
-  }
-};
+    const c = tokenResp.idTokenClaims || {};
+    if (c.tid !== process.env.AZURE_TENANT_ID) return res.status(403).json({ error: 'Wrong tenant' });
 
-export default { signup, login };
+    const email = c.preferred_username || c.upn || null;
+    const username = c.name || email || 'User';
+
+    // Creates or updates the user document
+    const user = await Auth.findOneAndUpdate(
+      { 'ms.oid': c.oid, 'ms.tid': c.tid },
+      {
+        $setOnInsert: { username },
+        $set: {
+          email,
+          ms: { oid: c.oid, tid: c.tid, sub: c.sub, upn: c.upn, preferredUsername: c.preferred_username, name: c.name },
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    issueSession(res, { uid: String(user._id), ms: { oid: c.oid, tid: c.tid }, activeSwarm: user.activeSwarm || null });
+
+    return res.redirect(process.env.POST_LOGIN_REDIRECT || '/');
+  } catch (err) { next(err); }
+}
