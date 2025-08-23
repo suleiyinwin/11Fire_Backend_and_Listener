@@ -4,11 +4,11 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import wsRouter from './routes/wsRouter.js';
-import uploadRouter from './routes/uploadRouter.js';
 import authRouter from './routes/authRouter.js';
 import bootstrapListener from './routes/bootstrapRouter.js';
-import swarmRouter from './routes/swarmRouter.js';
-import authMiddleware from './middlewares/authMiddleware.js';
+import cookieParser from 'cookie-parser';
+import { attachUser } from './middlewares/authMiddleware.js';
+
 
 dotenv.config();
 const app = express();
@@ -16,11 +16,16 @@ const port = process.env.HTTP_PORT || 3001;
 
 mongoose.connect(process.env.MONGODB_URI|| 'mongodb://localhost:27017/11fire').then(() => console.log('MongoDB connected')).catch(err => console.error('MongoDB connection error:', err));
 
-app.use(cors());
+
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS,
+  credentials: true, 
+}));
 app.use(express.json());
-app.use('/api/auth', authRouter);
-app.use('/api', authMiddleware, uploadRouter);
-app.use('/api/swarm', authMiddleware, swarmRouter);
+app.use(cookieParser());
+app.use(attachUser);  
+
+app.use('/auth', authRouter);
 
 app.listen(port, () => console.log(`REST API server running on port ${port}`));
 
