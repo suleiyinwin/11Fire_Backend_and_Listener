@@ -79,6 +79,8 @@ export async function upsertMembership(req, res, next) {
         .json({ error: "swarmId and valid role are required" });
     }
 
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+
     const user = await Auth.findById(req.user.uid);
     if (!user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -95,6 +97,8 @@ export async function setActiveSwarm(req, res, next) {
   try {
     const { swarmId } = req.body || {};
     if (!swarmId) return res.status(400).json({ error: "swarmId is required" });
+
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
 
     const user = await Auth.findById(req.user.uid);
     if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -115,11 +119,21 @@ export async function setActiveSwarm(req, res, next) {
 
 //user information
 export async function me(req, res) {
-  if (!req.user) return res.status(200).json({ user: null });
-  const doc = await Auth.findById(req.user.uid).select(
-    "username email ms memberships activeSwarm createdAt"
-  );
-  res.json({ user: doc });
+  try {
+    // console.log("Session cookie:", req.cookies?.sid);
+    // console.log("Decoded user from JWT:", req.user);
+
+    if (!req.user?.uid) return res.status(200).json({ user: null });
+
+    const doc = await Auth.findById(req.user.uid).select(
+      "username email ms memberships activeSwarm createdAt"
+    );
+
+    // console.log("Fetched user from DB:", doc);
+    res.json({ user: doc });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
 }
 
 //logout
