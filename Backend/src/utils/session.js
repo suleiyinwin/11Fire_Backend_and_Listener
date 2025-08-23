@@ -7,7 +7,8 @@ export function issueSession(res, payload) {
   const token = jwt.sign(payload, process.env.APP_JWT_SECRET, { expiresIn: '2h' });
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    // secure: process.env.NODE_ENV === 'production', //only for HTTPS
+    secure: false, // For development, set to false. Change to true in production.
     sameSite: 'strict',
     path: '/',
     maxAge: 2 * 60 * 60 * 1000,
@@ -22,7 +23,8 @@ export function updateSession(res, prevPayload, patch) {
 export function clearSession(res) {
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    // secure: process.env.NODE_ENV === 'production', //only for HTTPS
+    secure: false, // For development, set to false. Change to true in production.
     sameSite: 'strict',
     path: '/',
   });
