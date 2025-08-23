@@ -69,3 +69,21 @@ export async function upsertMembership(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function setActiveSwarm(req, res, next) {
+  try {
+    const { swarmId } = req.body || {};
+    if (!swarmId) return res.status(400).json({ error: 'swarmId is required' });
+
+    const user = await Auth.findById(req.user.uid);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    const mem = user.getMembership(swarmId);
+    if (!mem) return res.status(403).json({ error: 'Not a member of this swarm' });
+
+    user.activeSwarm = swarmId;
+    await user.save();
+    updateSession(res, req.user, { activeSwarm: swarmId });
+
+    res.json({ ok: true, activeSwarm: swarmId, role: mem.role });
+  } catch (err) { next(err); }
+}
