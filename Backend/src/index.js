@@ -5,6 +5,7 @@ import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import wsRouter from './routes/wsRouter.js';
 import authRouter from './routes/authRouter.js';
+import swarmRouter from './routes/swarmRouter.js';
 import bootstrapListener from './routes/bootstrapRouter.js';
 import cookieParser from 'cookie-parser';
 import { attachUser } from './middlewares/authMiddleware.js';
@@ -26,6 +27,7 @@ app.use(cookieParser());
 app.use(attachUser);  
 
 app.use('/auth', authRouter);
+app.use('/swarms', swarmRouter);
 
 app.listen(port, () => console.log(`REST API server running on port ${port}`));
 
