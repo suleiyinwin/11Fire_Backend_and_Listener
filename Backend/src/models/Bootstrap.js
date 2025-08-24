@@ -6,5 +6,5 @@ const bootstrapSchema = new mongoose.Schema({
   isUsed: { type: Boolean, default: false },
 });
 
-const Auth = mongoose.model('Bootstrap', bootstrapSchema);
-export default Auth;
+const Bootstrap = mongoose.model('Bootstrap', bootstrapSchema);
+export default Bootstrap;
