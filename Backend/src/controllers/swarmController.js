@@ -2,7 +2,6 @@ import bcrypt from 'bcryptjs';
 import Swarm from '../models/Swarm.js';
 import Bootstrap from '../models/Bootstrap.js';
 import Auth from '../models/Auth.js';
-import bootstrapController from './bootstrapController.js';
 import { upsertMembershipForUser } from '../utils/membershipUtils.js';
 import generator from 'js-ipfs-swarm-key-gen';
 
@@ -80,12 +79,7 @@ const joinSwarm = async (req, res) => {
     const user = await Auth.findById(req.user.uid);
 
     // Check if user is already a member
-    const isAlreadyInSwarms = user.swarms.includes(swarmId);
     const isAlreadyMember = swarm.members.includes(req.user.uid);
-
-    if (!isAlreadyInSwarms) {
-      await Auth.findByIdAndUpdate(req.user.uid, { $addToSet: { swarms: swarmId } });
-    }
 
     if (!isAlreadyMember) {
       await Swarm.findByIdAndUpdate(swarmId, { $addToSet: { members: req.user.uid } });
