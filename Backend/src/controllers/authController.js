@@ -2,6 +2,7 @@ import Auth from "../models/Auth.js";
 import { msalClient } from "../lib/msalClient.js";
 import { issueSession, updateSession, clearSession } from "../utils/session.js";
 import { upsertMembershipForUser } from "../utils/membershipUtils.js";
+import { generateProviderClaimForUser } from "../utils/providerClaim.js";
 
 const BASE_SCOPES = ["openid", "profile", "email"];
 
@@ -57,6 +58,12 @@ export async function callback(req, res, next) {
       { upsert: true, new: true }
     );
 
+    // try {
+    //   await generateProviderClaimForUser(user._id);
+    // } catch (e) {
+    //   console.error("Failed to generate provider claim token:", e);
+    // }
+
     issueSession(res, {
       uid: String(user._id),
       ms: { oid: c.oid, tid: c.tid },
@@ -66,6 +73,31 @@ export async function callback(req, res, next) {
     return res.redirect(process.env.POST_LOGIN_REDIRECT || "/");
   } catch (err) {
     next(err);
+  }
+}
+
+//UI calls this (auth required) to fetch existing unexpired token metadata or regenerate one
+export async function mintProviderClaimToken(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+
+    const { renew = false } = req.body || {};
+    const doc = await Auth.findById(req.user.uid).select("providerClaim");
+    const now = new Date();
+
+    if (!renew && doc?.providerClaim && !doc.providerClaim.usedAt && doc.providerClaim.expiresAt > now) {
+      return res.status(200).json({
+        token: null,                // we don't store plaintext
+        expiresAt: doc.providerClaim.expiresAt,
+        alreadyExists: true,
+      });
+    }
+
+    const { token, expiresAt } = await generateProviderClaimForUser(req.user.uid);
+    return res.json({ token, expiresAt, alreadyExists: false });
+  } catch (err) {
+    console.error("mintProviderClaimToken failed:", err);
+    res.status(500).json({ error: "Failed to mint provider claim token" });
   }
 }
 

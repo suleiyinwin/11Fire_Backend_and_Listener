@@ -24,6 +24,15 @@ const MembershipSchema = new mongoose.Schema(
   { _id: false, timestamps: true }
 );
 
+const ProviderClaimSchema = new mongoose.Schema(
+  {
+    tokenHash: { type: String, required: true }, 
+    expiresAt: { type: Date, required: true },   
+    usedAt: { type: Date, default: null },       
+  },
+  { _id: false }
+);
+
 const authSchema = new mongoose.Schema(
   {
     ms: { type: MsIdentitySchema, required: true },
@@ -36,12 +45,18 @@ const authSchema = new mongoose.Schema(
       ref: "Swarm",
       default: null,
     },
+    providerClaim: { type: ProviderClaimSchema, default: null },
   },
   { timestamps: true }
 );
 
 authSchema.index({ 'ms.oid': 1, 'ms.tid': 1 }, { unique: true, name: 'uniq_user_per_tenant' });
 
+//peerId unique when present (prevents two users sharing one node)
+authSchema.index(
+  { peerId: 1 },
+  { unique: true, partialFilterExpression: { peerId: { $type: 'string' } }, name: 'uniq_peerId_if_present' }
+);
 
 /**
 * Helper: find a membership by swarm id.

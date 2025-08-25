@@ -6,6 +6,7 @@ import { WebSocketServer } from 'ws';
 import wsRouter from './routes/wsRouter.js';
 import authRouter from './routes/authRouter.js';
 import swarmRouter from './routes/swarmRouter.js';
+import providerRouter from './routes/providerRouter.js';
 import bootstrapListener from './routes/bootstrapRouter.js';
 import cookieParser from 'cookie-parser';
 import { attachUser } from './middlewares/authMiddleware.js';
@@ -28,12 +29,12 @@ app.use(attachUser);
 
 app.use('/auth', authRouter);
 app.use('/swarms', swarmRouter);
-
+app.use('/providers', providerRouter);
 app.listen(port, () => console.log(`REST API server running on port ${port}`));
 
 const wssProvider = new WebSocketServer({ port: 9090 });
 console.log("WebSocket Server for providers listening on port 9090");
-wsRouter(wssProvider);
+// wsRouter(wssProvider);
 
 const wssBootstrap = new WebSocketServer({ port: 9091 });
 console.log("WebSocket Server for bootstrap node listening on port 9091");
