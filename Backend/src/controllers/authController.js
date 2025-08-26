@@ -3,6 +3,8 @@ import { msalClient } from "../lib/msalClient.js";
 import { issueSession, updateSession, clearSession } from "../utils/session.js";
 import { upsertMembershipForUser } from "../utils/membershipUtils.js";
 import { generateProviderClaimForUser } from "../utils/providerClaim.js";
+import { setQuotaForActiveSwarm } from "../utils/membershipUtils.js";
+import { bytesToGb } from "../utils/units.js";
 
 const BASE_SCOPES = ["openid", "profile", "email"];
 
@@ -187,4 +189,30 @@ export async function me(req, res) {
 export async function logout(_req, res) {
   clearSession(res);
   res.json({ ok: true });
+}
+
+//set quota for active swarm
+// After provider joined/created, they can set quota for their ACTIVE swarm
+export async function setActiveSwarmQuota(req, res, next) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    const { quotaGB, quotaBytes } = req.body || {};
+
+    const user = await Auth.findById(req.user.uid);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    const result = await setQuotaForActiveSwarm(user, { quotaGB, quotaBytes });
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+
+    const m = result.membership;
+    return res.json({
+      ok: true,
+      swarmId: String(user.activeSwarm),
+      quotaBytes: m.quotaBytes,      
+      quotaGB: bytesToGb(m.quotaBytes),   
+      role: m.role,
+    });
+  } catch (err) {
+    next(err);
+  }
 }
