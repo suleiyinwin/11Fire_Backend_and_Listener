@@ -149,6 +149,21 @@ export async function setActiveSwarm(req, res, next) {
   }
 }
 
+//active swarm (for backend use)
+export async function setActiveSwarmBackend(userId, swarmId) {
+  if (!userId || !swarmId) throw new Error("userId and swarmId are required");
+
+  const user = await Auth.findById(userId);
+  if (!user) throw new Error("User not found");
+
+  const mem = user.getMembership(swarmId);
+  if (!mem) throw new Error("Not a member of this swarm");
+
+  user.activeSwarm = swarmId;
+  await user.save();
+  return { activeSwarm: swarmId, role: mem.role };
+}
+
 //user information
 export async function me(req, res) {
   try {
