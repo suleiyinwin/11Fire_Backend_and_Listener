@@ -3,6 +3,7 @@ import Swarm from '../models/Swarm.js';
 import Bootstrap from '../models/Bootstrap.js';
 import Auth from '../models/Auth.js';
 import { upsertMembershipForUser } from '../utils/membershipUtils.js';
+import {setActiveSwarmBackend} from '../controllers/authController.js'
 import generator from 'js-ipfs-swarm-key-gen';
 
 const createSwarm = async (req, res) => {
@@ -40,6 +41,9 @@ const createSwarm = async (req, res) => {
     // Assign membership (role per swarm)
     const user = await Auth.findById(req.user.uid);
     await upsertMembershipForUser(user, { swarmId: swarm._id, role });
+
+    // Put it in activeSwarm 
+    await setActiveSwarmBackend(req.user.uid, swarm._id);
 
     // Mark bootstrap node as used
     await Bootstrap.findByIdAndUpdate(bootstrap._id, {
@@ -87,6 +91,9 @@ const joinSwarm = async (req, res) => {
 
     // Upsert membership with role
     await upsertMembershipForUser(user, { swarmId, role });
+
+    // Put it in activeSwarm 
+    await setActiveSwarmBackend(req.user.uid, swarm._id);
 
     res.json({ message: 'Joined swarm successfully' });
   } catch (err) {
