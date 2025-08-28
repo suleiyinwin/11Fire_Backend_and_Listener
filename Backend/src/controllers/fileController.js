@@ -1,12 +1,17 @@
 import Auth from "../models/Auth.js";
 import Swarm from "../models/Swarm.js";
 import FileModel from "../models/FileModel.js";
-import { uploadViaBootstrap } from "./uploadController.js";
+import {
+  uploadViaBootstrap,
+  downloadViaBootstrap,
+} from "./uploadController.js";
 import {
   getOnlineProvidersForSwarm,
   measureRtt,
-  pinCid,
+  unpinCid,
 } from "../ws/providerRegistry.js";
+
+import bootstrapController from "./bootstrapController.js";
 
 /** Sum of bytes a provider stores within one swarm (based on FileModel) */
 async function usedBytesInSwarm(providerUserId, swarmId) {
@@ -126,14 +131,14 @@ function pinWithTimeout(ws, cid, ms = 180000) {
  * Fire pins in parallel to more candidates than needed and take the first N successes.
  * @param {string} cid
  * @param {Array<{ws:any,userId:string}>} candidates
- * @param {number} need  
+ * @param {number} need
  * @param {number} extra extra fan-out to hedge slow/bad nodes (e.g., 2-3)
  * @returns {Promise<string[]>} userIds that successfully pinned
  */
 async function replicateToN(cid, candidates, need = 3, extra = 3) {
   const targets = candidates.slice(0, need + extra);
   const attempts = targets.map((p) =>
-    pinWithTimeout(p.ws, cid, 180000) // 3 minutes per peer 
+    pinWithTimeout(p.ws, cid, 180000) // 3 minutes per peer
       .then((ok) => ({ ok, userId: p.userId }))
       .catch(() => ({ ok: false, userId: p.userId }))
   );
@@ -214,5 +219,160 @@ export async function uploadAndReplicate(req, res) {
   } catch (err) {
     console.error("uploadAndReplicate failed:", err);
     return res.status(500).json({ error: "Upload failed" });
+  }
+}
+
+/** Download a file's bytes by CID via bootstrap, with basic access control. */
+export async function downloadFile(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    const { cid } = req.params;
+    if (!cid) return res.status(400).json({ error: "Missing cid" });
+
+    const fileDoc = await FileModel.findOne({ cid });
+    if (!fileDoc) return res.status(404).json({ error: "File not found" });
+
+    const user = await Auth.findById(req.user.uid);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    // Access control: owner or explicitly shared. (Adjust policy here if needed.) -> beta implementation
+    const isOwner = String(fileDoc.ownerId) === String(user._id);
+    const isShared = (fileDoc.sharedIds || []).some(
+      (id) => String(id) === String(user._id)
+    );
+    if (!isOwner && !isShared) {
+      //file access for beta implementation
+      const mem = user.getMembership(fileDoc.swarm);
+      if (!mem)
+        return res.status(403).json({ error: "No access to this file" });
+      // return res.status(403).json({ error: "No access to this file" });
+    }
+
+    const buf = await downloadViaBootstrap(cid);
+
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${fileDoc.name || cid}"`
+    );
+    res.setHeader("Content-Length", String(buf.length));
+    return res.status(200).send(buf);
+  } catch (err) {
+    console.error("downloadFile failed:", err);
+    const msg = /connected/i.test(String(err?.message || ""))
+      ? "Bootstrap not connected"
+      : "Download failed";
+    return res.status(503).json({ error: msg });
+  }
+}
+
+/** Delete a file by CID (owner-only). */
+export async function deleteFile(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    const { cid } = req.params;
+    if (!cid) return res.status(400).json({ error: "Missing cid" });
+
+    const fileDoc = await FileModel.findOne({ cid });
+    if (!fileDoc) return res.status(404).json({ error: "File not found" });
+
+    // Only owner can delete
+    if (String(fileDoc.ownerId) !== String(req.user.uid)) {
+      return res
+        .status(403)
+        .json({ error: "Only the owner can delete this file" });
+    }
+
+    // Unpin from all providers
+    const swarmId = fileDoc.swarm;
+    const providers = await getOnlineProvidersForSwarm(swarmId);
+    for (const p of providers) {
+      try {
+        await unpinCid(p.ws, cid);
+        console.log(`[deleteFile] Unpinned ${cid} from provider ${p.userId}`);
+      } catch (e) {
+        console.error(
+          `[deleteFile] Failed to unpin from ${p.userId}:`,
+          e.message
+        );
+      }
+    }
+
+    // Optionally: unpin from bootstrap
+    const sock = bootstrapController.getSocket();
+    if (sock && sock.readyState === 1) {
+      sock.send(`unpin|${cid}`);
+    }
+
+    // Remove metadata
+    await FileModel.deleteOne({ _id: fileDoc._id });
+
+    return res.json({ ok: true, cid });
+  } catch (err) {
+    console.error("deleteFile failed:", err);
+    return res.status(500).json({ error: "Delete failed" });
+  }
+}
+
+export async function listMyFilesInActiveSwarm(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+
+    const user = await Auth.findById(req.user.uid).select("activeSwarm");
+    if (!user?.activeSwarm)
+      return res.status(400).json({ error: "Set an active swarm first" });
+
+    const items = await FileModel.find({
+      ownerId: user._id,
+      swarm: user.activeSwarm,
+    })
+      .sort({ date: -1, _id: -1 })
+      .select("_id name cid size date isFile swarm storedIds sharedIds");
+
+    return res.json({ ok: true, items });
+  } catch (err) {
+    console.error("listMyFilesInActiveSwarm failed:", err);
+    return res.status(500).json({ error: "Failed to list files" });
+  }
+}
+
+export async function renameFile(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    const { cid } = req.params;
+    const { name } = req.body || {};
+
+    if (!cid) return res.status(400).json({ error: "Missing cid" });
+    if (typeof name !== "string")
+      return res.status(400).json({ error: "name must be a string" });
+
+    // Basic normalization/sanitization
+    const cleaned = name
+      .replace(/[␀-␟•]/g, "") // control chars
+      .replace(/[\/]/g, "-") // slashes -> dash
+      .trim();
+
+    if (!cleaned)
+      return res.status(400).json({ error: "name cannot be empty" });
+    if (cleaned.length > 255)
+      return res.status(400).json({ error: "name too long (max 255)" });
+
+    const fileDoc = await FileModel.findOne({ cid });
+    if (!fileDoc) return res.status(404).json({ error: "File not found" });
+
+    // Only owner can rename
+    if (String(fileDoc.ownerId) !== String(req.user.uid)) {
+      return res
+        .status(403)
+        .json({ error: "Only the owner can rename this file" });
+    }
+
+    fileDoc.name = cleaned;
+    await fileDoc.save();
+
+    return res.json({ ok: true, cid, name: fileDoc.name });
+  } catch (err) {
+    console.error("renameFile failed:", err);
+    return res.status(500).json({ error: "Rename failed" });
   }
 }

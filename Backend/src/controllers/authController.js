@@ -143,7 +143,6 @@ export async function setActiveSwarm(req, res, next) {
 
     user.activeSwarm = swarmId;
     await user.save();
-    updateSession(res, req.user, { activeSwarm: swarmId });
 
     res.json({ ok: true, activeSwarm: swarmId, role: mem.role });
   } catch (err) {
