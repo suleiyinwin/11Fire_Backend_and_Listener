@@ -4,6 +4,7 @@ import { requireAuth } from "../middlewares/authMiddleware.js";
 import {
   uploadAndReplicate,
   downloadFile,
+  deleteFile
 } from "../controllers/fileController.js";
 
 const upload = multer({
@@ -34,5 +35,8 @@ router.post(
 
 // download by CID
 router.get("/download/:cid", requireAuth, downloadFile);
+
+// Delete a file by CID (owner-only)
+router.delete("/delete/:cid", requireAuth, deleteFile);
 
 export default router;
