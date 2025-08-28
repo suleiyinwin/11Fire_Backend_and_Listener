@@ -8,7 +8,10 @@ import {
 import {
   getOnlineProvidersForSwarm,
   measureRtt,
+  unpinCid
 } from "../ws/providerRegistry.js";
+
+import bootstrapController from "./bootstrapController.js";
 
 /** Sum of bytes a provider stores within one swarm (based on FileModel) */
 async function usedBytesInSwarm(providerUserId, swarmId) {
@@ -259,5 +262,48 @@ export async function downloadFile(req, res) {
       ? "Bootstrap not connected"
       : "Download failed";
     return res.status(503).json({ error: msg });
+  }
+}
+
+/** Delete a file by CID (owner-only). */
+export async function deleteFile(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    const { cid } = req.params;
+    if (!cid) return res.status(400).json({ error: "Missing cid" });
+
+    const fileDoc = await FileModel.findOne({ cid });
+    if (!fileDoc) return res.status(404).json({ error: "File not found" });
+
+    // Only owner can delete
+    if (String(fileDoc.ownerId) !== String(req.user.uid)) {
+      return res.status(403).json({ error: "Only the owner can delete this file" });
+    }
+
+    // Unpin from all providers
+    const swarmId = fileDoc.swarm;
+    const providers = await getOnlineProvidersForSwarm(swarmId);
+    for (const p of providers) {
+      try {
+        await unpinCid(p.ws, cid);
+        console.log(`[deleteFile] Unpinned ${cid} from provider ${p.userId}`);
+      } catch (e) {
+        console.error(`[deleteFile] Failed to unpin from ${p.userId}:`, e.message);
+      }
+    }
+
+    // Optionally: unpin from bootstrap
+    const sock = bootstrapController.getSocket();
+    if (sock && sock.readyState === 1) {
+      sock.send(`unpin|${cid}`);
+    }
+
+    // Remove metadata
+    await FileModel.deleteOne({ _id: fileDoc._id });
+
+    return res.json({ ok: true, cid });
+  } catch (err) {
+    console.error("deleteFile failed:", err);
+    return res.status(500).json({ error: "Delete failed" });
   }
 }
