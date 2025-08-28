@@ -5,7 +5,8 @@ import {
   uploadAndReplicate,
   downloadFile,
   deleteFile,
-  listMyFilesInActiveSwarm
+  listMyFilesInActiveSwarm,
+  renameFile
 } from "../controllers/fileController.js";
 
 const upload = multer({
@@ -42,5 +43,8 @@ router.delete("/delete/:cid", requireAuth, deleteFile);
 
 // List my files in active swarm
 router.get("/mine", requireAuth, listMyFilesInActiveSwarm);
+
+// Rename a file by CID (owner-only)
+router.patch("/rename/:cid", requireAuth, renameFile);
 
 export default router;
