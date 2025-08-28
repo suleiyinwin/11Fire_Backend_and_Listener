@@ -4,7 +4,8 @@ import { requireAuth } from "../middlewares/authMiddleware.js";
 import {
   uploadAndReplicate,
   downloadFile,
-  deleteFile
+  deleteFile,
+  listMyFilesInActiveSwarm
 } from "../controllers/fileController.js";
 
 const upload = multer({
@@ -38,5 +39,8 @@ router.get("/download/:cid", requireAuth, downloadFile);
 
 // Delete a file by CID (owner-only)
 router.delete("/delete/:cid", requireAuth, deleteFile);
+
+// List my files in active swarm
+router.get("/mine", requireAuth, listMyFilesInActiveSwarm);
 
 export default router;
