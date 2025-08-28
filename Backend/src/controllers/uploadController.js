@@ -79,7 +79,4 @@ export function handleMessage(msgBuf) {
       }
     }
   }
-
-  // We could handle 'file|...' (delete) here later.
-  // Unknown messages are ignored.
 }
