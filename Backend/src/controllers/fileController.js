@@ -335,3 +335,44 @@ export async function listMyFilesInActiveSwarm(req, res) {
     return res.status(500).json({ error: "Failed to list files" });
   }
 }
+
+export async function renameFile(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    const { cid } = req.params;
+    const { name } = req.body || {};
+
+    if (!cid) return res.status(400).json({ error: "Missing cid" });
+    if (typeof name !== "string")
+      return res.status(400).json({ error: "name must be a string" });
+
+    // Basic normalization/sanitization
+    const cleaned = name
+      .replace(/[␀-␟•]/g, "") // control chars
+      .replace(/[\/]/g, "-") // slashes -> dash
+      .trim();
+
+    if (!cleaned)
+      return res.status(400).json({ error: "name cannot be empty" });
+    if (cleaned.length > 255)
+      return res.status(400).json({ error: "name too long (max 255)" });
+
+    const fileDoc = await FileModel.findOne({ cid });
+    if (!fileDoc) return res.status(404).json({ error: "File not found" });
+
+    // Only owner can rename
+    if (String(fileDoc.ownerId) !== String(req.user.uid)) {
+      return res
+        .status(403)
+        .json({ error: "Only the owner can rename this file" });
+    }
+
+    fileDoc.name = cleaned;
+    await fileDoc.save();
+
+    return res.json({ ok: true, cid, name: fileDoc.name });
+  } catch (err) {
+    console.error("renameFile failed:", err);
+    return res.status(500).json({ error: "Rename failed" });
+  }
+}
