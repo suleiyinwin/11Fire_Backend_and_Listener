@@ -1,7 +1,10 @@
 import express from "express";
 import multer from "multer";
 import { requireAuth } from "../middlewares/authMiddleware.js";
-import { uploadAndReplicate } from "../controllers/fileController.js";
+import {
+  uploadAndReplicate,
+  downloadFile,
+} from "../controllers/fileController.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -28,5 +31,8 @@ router.post(
   },
   uploadAndReplicate
 );
+
+// download by CID
+router.get("/download/:cid", requireAuth, downloadFile);
 
 export default router;
