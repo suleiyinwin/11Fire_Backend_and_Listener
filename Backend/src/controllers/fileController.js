@@ -8,7 +8,7 @@ import {
 import {
   getOnlineProvidersForSwarm,
   measureRtt,
-  unpinCid
+  unpinCid,
 } from "../ws/providerRegistry.js";
 
 import bootstrapController from "./bootstrapController.js";
@@ -243,7 +243,8 @@ export async function downloadFile(req, res) {
     if (!isOwner && !isShared) {
       //file access for beta implementation
       const mem = user.getMembership(fileDoc.swarm);
-      if (!mem) return res.status(403).json({ error: "No access to this file" });
+      if (!mem)
+        return res.status(403).json({ error: "No access to this file" });
       // return res.status(403).json({ error: "No access to this file" });
     }
 
@@ -277,7 +278,9 @@ export async function deleteFile(req, res) {
 
     // Only owner can delete
     if (String(fileDoc.ownerId) !== String(req.user.uid)) {
-      return res.status(403).json({ error: "Only the owner can delete this file" });
+      return res
+        .status(403)
+        .json({ error: "Only the owner can delete this file" });
     }
 
     // Unpin from all providers
@@ -288,7 +291,10 @@ export async function deleteFile(req, res) {
         await unpinCid(p.ws, cid);
         console.log(`[deleteFile] Unpinned ${cid} from provider ${p.userId}`);
       } catch (e) {
-        console.error(`[deleteFile] Failed to unpin from ${p.userId}:`, e.message);
+        console.error(
+          `[deleteFile] Failed to unpin from ${p.userId}:`,
+          e.message
+        );
       }
     }
 
@@ -305,5 +311,27 @@ export async function deleteFile(req, res) {
   } catch (err) {
     console.error("deleteFile failed:", err);
     return res.status(500).json({ error: "Delete failed" });
+  }
+}
+
+export async function listMyFilesInActiveSwarm(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+
+    const user = await Auth.findById(req.user.uid).select("activeSwarm");
+    if (!user?.activeSwarm)
+      return res.status(400).json({ error: "Set an active swarm first" });
+
+    const items = await FileModel.find({
+      ownerId: user._id,
+      swarm: user.activeSwarm,
+    })
+      .sort({ date: -1, _id: -1 })
+      .select("_id name cid size date isFile swarm storedIds sharedIds");
+
+    return res.json({ ok: true, items });
+  } catch (err) {
+    console.error("listMyFilesInActiveSwarm failed:", err);
+    return res.status(500).json({ error: "Failed to list files" });
   }
 }
