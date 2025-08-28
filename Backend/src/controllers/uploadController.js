@@ -6,9 +6,14 @@ import bootstrapController from "./bootstrapController.js";
 
 const pending = new Map(); // reqId -> {resolve, reject, t}
 
-export async function uploadViaBootstrap(name, buffer, timeoutMs = 2 * 60 * 1000) {
+export async function uploadViaBootstrap(
+  name,
+  buffer,
+  timeoutMs = 2 * 60 * 1000
+) {
   const sock = bootstrapController.getSocket();
-  if (!sock || sock.readyState !== 1) throw new Error("Bootstrap is not connected");
+  if (!sock || sock.readyState !== 1)
+    throw new Error("Bootstrap is not connected");
 
   const reqId = crypto.randomBytes(8).toString("hex");
   const payload = Buffer.from(buffer).toString("base64");
@@ -23,6 +28,25 @@ export async function uploadViaBootstrap(name, buffer, timeoutMs = 2 * 60 * 1000
 
   // format: upload|<reqId>|<name>|<base64>
   sock.send(`upload|${reqId}|${name}|${payload}`);
+  return p;
+}
+
+export async function downloadViaBootstrap(cid, timeoutMs = 2 * 60 * 1000) {
+  const sock = bootstrapController.getSocket();
+  if (!sock || sock.readyState !== 1)
+    throw new Error("Bootstrap is not connected");
+
+  const reqId = crypto.randomBytes(8).toString("hex");
+  const p = new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      pending.delete(reqId);
+      reject(new Error("bootstrap download timeout"));
+    }, timeoutMs);
+    pending.set(reqId, { resolve, reject, t });
+  });
+
+  // format: download|<reqId>|<cid>
+  sock.send(`download|${reqId}|${cid}`);
   return p;
 }
 
@@ -41,7 +65,21 @@ export function handleMessage(msgBuf) {
     }
   }
 
-  // We could handle 'file|...' (download) here later.
+  if (str.startsWith("file|")) {
+    const [, reqId, b64] = str.split("|");
+    const entry = pending.get(reqId);
+    if (entry) {
+      clearTimeout(entry.t);
+      pending.delete(reqId);
+      try {
+        const buf = Buffer.from(b64, "base64");
+        return entry.resolve(buf);
+      } catch (e) {
+        return entry.reject(new Error("invalid base64 from bootstrap"));
+      }
+    }
+  }
+
+  // We could handle 'file|...' (delete) here later.
   // Unknown messages are ignored.
 }
-
