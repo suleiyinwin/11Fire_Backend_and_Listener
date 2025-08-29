@@ -154,13 +154,12 @@ const listMySwarms = async (req, res) => {
 
     const items = (user.memberships || []).map((m) => ({
       swarmId: String(m.swarm?._id || m.swarm),
+      swarmName: m.swarm?.name || null,
       role: m.role,
       quotaBytes: m.quotaBytes,
       createdAt: m.createdAt,
       updatedAt: m.updatedAt,
-      swarm: m.swarm
-        ? { _id: String(m.swarm._id), bootstrapId: m.swarm.bootstrapId }
-        : null,
+      bootstrapId: m.swarm?.bootstrapId || null,
     }));
 
     return res.json({ ok: true, items });
