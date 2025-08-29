@@ -35,6 +35,9 @@ export async function getActiveQuotaUsage(req, res) {
     ]);
     const usedBytes = r?.[0]?.total || 0;
 
+    const SwarmModel = (await import("../models/Swarm.js")).default;
+    const swarm = await SwarmModel.findById(user.activeSwarm).select("name").lean();
+
     const quotaGB = quotaBytes == null ? null : bytesToGb(quotaBytes);
     const usedGB = bytesToGb(usedBytes);
     const percentUsed =
@@ -45,6 +48,7 @@ export async function getActiveQuotaUsage(req, res) {
     return res.json({
       ok: true,
       swarmId: String(user.activeSwarm),
+      swarmName: swarm?.name || null,
       quotaBytes,
       quotaGB,
       usedBytes,
