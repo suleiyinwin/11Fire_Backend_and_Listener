@@ -7,11 +7,12 @@ import { setActiveSwarmBackend } from "../controllers/authController.js";
 import generator from "js-ipfs-swarm-key-gen";
 
 const createSwarm = async (req, res) => {
-  const { password, role } = req.body;
-  if (!password || password.length < 8) {
-    return res
-      .status(400)
-      .json({ error: "Password must be at least 8 characters" });
+  const { name, password, role } = req.body;
+  if (!name || !password || !role) {
+    return res.status(400).json({ error: 'name, password, and role are required' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
   if (!["user", "provider"].includes(role)) {
@@ -21,6 +22,10 @@ const createSwarm = async (req, res) => {
   }
 
   try {
+    // check unique swarm name
+    const existing = await Swarm.findOne({ name });
+    if (existing) return res.status(400).json({ error: 'Swarm name already exists' });
+
     // Generate swarm key using js-ipfs-swarm-key-gen
     const swarmKeyObj = await generator();
     const key = swarmKeyObj.key;
@@ -32,6 +37,7 @@ const createSwarm = async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10);
     const swarm = await Swarm.create({
+      name,
       swarmkey: key,
       password: hashed,
       members: [req.user.uid],
@@ -65,7 +71,7 @@ const createSwarm = async (req, res) => {
     // const socket = bootstrapController.getSocket(bootstrap.peerId);
     // if (socket?.readyState === 1) socket.send(`swarmkey|${key}`);
 
-    res.json({ message: "Swarm created", swarmId: swarm._id });
+    res.json({ message: "Swarm created", swarmId: swarm._id, name: swarm.name});
   } catch (err) {
     console.error("Swarm creation failed:", err);
     res.status(500).json({ error: "Swarm creation failed" });
@@ -73,15 +79,16 @@ const createSwarm = async (req, res) => {
 };
 
 const joinSwarm = async (req, res) => {
-  const { swarmId, password, role } = req.body;
-  if (!swarmId || !password || !["user", "provider"].includes(role)) {
-    return res
-      .status(400)
-      .json({ error: "swarmId, password, and valid role are required" });
+  const { name, password, role } = req.body;
+  if (!name || !password || !role) {
+    return res.status(400).json({ error: 'name, password, and role are required' });
+  }
+  if (!['user', 'provider'].includes(role)) {
+    return res.status(400).json({ error: 'Valid role (user|provider) required' });
   }
 
   try {
-    const swarm = await Swarm.findById(swarmId);
+    const swarm = await Swarm.findOne({name});
     if (!swarm) return res.status(404).json({ error: "Swarm not found" });
 
     const match = await bcrypt.compare(password, swarm.password);
@@ -93,18 +100,18 @@ const joinSwarm = async (req, res) => {
     const isAlreadyMember = swarm.members.includes(req.user.uid);
 
     if (!isAlreadyMember) {
-      await Swarm.findByIdAndUpdate(swarmId, {
+      await Swarm.findByIdAndUpdate(swarm._id, {
         $addToSet: { members: req.user.uid },
       });
     }
 
     // Upsert membership with role
-    await upsertMembershipForUser(user, { swarmId, role });
+    await upsertMembershipForUser(user, { swarmId : swarm._id, role });
 
     // Put it in activeSwarm
     await setActiveSwarmBackend(req.user.uid, swarm._id);
 
-    res.json({ message: "Joined swarm successfully" });
+    res.json({ ok: true, message: 'Joined swarm successfully', name: swarm.name });
   } catch (err) {
     console.error("Join swarm failed:", err);
     res.status(500).json({ error: "Failed to join swarm" });
