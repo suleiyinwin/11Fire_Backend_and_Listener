@@ -24,7 +24,7 @@ const createSwarm = async (req, res) => {
   try {
     // check unique swarm name
     const existing = await Swarm.findOne({ name });
-    if (existing) return res.status(400).json({ error: 'Swarm name already exists' });
+    if (existing) return res.status(400).json({ error: 'Group name already exists' });
 
     // Generate swarm key using js-ipfs-swarm-key-gen
     const swarmKeyObj = await generator();
@@ -71,10 +71,10 @@ const createSwarm = async (req, res) => {
     // const socket = bootstrapController.getSocket(bootstrap.peerId);
     // if (socket?.readyState === 1) socket.send(`swarmkey|${key}`);
 
-    res.json({ message: "Swarm created", swarmId: swarm._id, name: swarm.name});
+    res.json({ message: "Group created", swarmId: swarm._id, name: swarm.name});
   } catch (err) {
-    console.error("Swarm creation failed:", err);
-    res.status(500).json({ error: "Swarm creation failed" });
+    console.error("Group creation failed:", err);
+    res.status(500).json({ error: "Group creation failed" });
   }
 };
 
@@ -89,7 +89,7 @@ const joinSwarm = async (req, res) => {
 
   try {
     const swarm = await Swarm.findOne({name});
-    if (!swarm) return res.status(404).json({ error: "Swarm not found" });
+    if (!swarm) return res.status(404).json({ error: "Group not found" });
 
     const match = await bcrypt.compare(password, swarm.password);
     if (!match) return res.status(403).json({ error: "Incorrect password" });
@@ -111,10 +111,10 @@ const joinSwarm = async (req, res) => {
     // Put it in activeSwarm
     await setActiveSwarmBackend(req.user.uid, swarm._id);
 
-    res.json({ ok: true, message: 'Joined swarm successfully', name: swarm.name });
+    res.json({ ok: true, message: 'Joined group successfully', name: swarm.name });
   } catch (err) {
-    console.error("Join swarm failed:", err);
-    res.status(500).json({ error: "Failed to join swarm" });
+    console.error("Join group failed:", err);
+    res.status(500).json({ error: "Failed to join group" });
   }
 };
 
@@ -164,8 +164,8 @@ const listMySwarms = async (req, res) => {
 
     return res.json({ ok: true, items });
   } catch (err) {
-    console.error("listMySwarms failed:", err);
-    return res.status(500).json({ error: "Failed to list swarms" });
+    console.error("listMyGroups failed:", err);
+    return res.status(500).json({ error: "Failed to list groups" });
   }
 };
 
@@ -180,10 +180,10 @@ const swarmNameCheck = async (req, res) => {
     if (!swarm) {
       return res.json({ ok: true });
     }
-    return res.status(400).json({ error: 'Swarm name already exists' });
+    return res.status(400).json({ error: 'Group name already exists' });
   } catch (err) {
-    console.error("Swarm name check failed:", err);
-    return res.status(500).json({ error: "Failed to check swarm name" });
+    console.error("Gruop name check failed:", err);
+    return res.status(500).json({ error: "Failed to check group name" });
   }
 }
 
@@ -196,7 +196,7 @@ const swarmPasswordCheck = async (req, res) => {
   try {
     const swarm = await Swarm.findOne({ name });
     if (!swarm) {
-      return res.status(404).json({ error: "Swarm not found" });
+      return res.status(404).json({ error: "Group not found" });
     }
 
     const match = await bcrypt.compare(password, swarm.password);
@@ -206,8 +206,8 @@ const swarmPasswordCheck = async (req, res) => {
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error("Swarm password check failed:", err);
-    return res.status(500).json({ error: "Failed to check swarm password" });
+    console.error("Group password check failed:", err);
+    return res.status(500).json({ error: "Failed to check group password" });
   }
 }
 
