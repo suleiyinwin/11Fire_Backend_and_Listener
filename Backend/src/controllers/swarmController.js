@@ -169,4 +169,22 @@ const listMySwarms = async (req, res) => {
   }
 };
 
-export default { createSwarm, joinSwarm, setRole, listMySwarms };
+const swarmNameCheck = async (req, res) => {
+  const { name } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: "Name is required" });
+  }
+
+  try {
+    const swarm = await Swarm.findOne({ name });
+    if (!swarm) {
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: 'Swarm name already exists' });
+  } catch (err) {
+    console.error("Swarm name check failed:", err);
+    return res.status(500).json({ error: "Failed to check swarm name" });
+  }
+}
+
+export default { createSwarm, joinSwarm, setRole, listMySwarms, swarmNameCheck };
