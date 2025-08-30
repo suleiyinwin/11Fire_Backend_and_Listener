@@ -187,4 +187,28 @@ const swarmNameCheck = async (req, res) => {
   }
 }
 
-export default { createSwarm, joinSwarm, setRole, listMySwarms, swarmNameCheck };
+const swarmPasswordCheck = async (req, res) => {
+  const { name, password } = req.body;
+  if (!name || !password) {
+    return res.status(400).json({ error: "Name and password are required" });
+  }
+
+  try {
+    const swarm = await Swarm.findOne({ name });
+    if (!swarm) {
+      return res.status(404).json({ error: "Swarm not found" });
+    }
+
+    const match = await bcrypt.compare(password, swarm.password);
+    if (!match) {
+      return res.status(403).json({ error: "Incorrect password" });
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("Swarm password check failed:", err);
+    return res.status(500).json({ error: "Failed to check swarm password" });
+  }
+}
+
+export default { createSwarm, joinSwarm, setRole, listMySwarms, swarmNameCheck, swarmPasswordCheck };
