@@ -182,3 +182,64 @@ export async function getActiveUptime(req, res) {
   }
 }
 
+export async function getActiveUptimeLine24h(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+
+    const user = await Auth.findById(req.user.uid).select("_id activeSwarm");
+    if (!user?.activeSwarm) return res.status(400).json({ error: "Set an active swarm first" });
+    const swarm = await Swarm.findById(user.activeSwarm).select("name").lean();
+
+    const now = new Date();
+    const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    // Find events overlapping last 24h
+    const events = await ProviderUptimeEvent.find({
+      userId: user._id,
+      swarm: user.activeSwarm,
+      $or: [
+        { start: { $lte: now }, end: { $gte: since } },
+        { start: { $lte: now }, end: null },
+      ],
+    }).select("state start end").sort({ start: 1 }).lean();
+
+    // Generate 24 hourly buckets
+    const points = [];
+    let t = new Date(since);
+    for (let i = 0; i < 24; i++) {
+      const bucketStart = new Date(t);
+      const bucketEnd = new Date(t.getTime() + 60 * 60 * 1000);
+
+      // Look for online overlap
+      let online = 0;
+      for (const ev of events) {
+        if (ev.state !== "online") continue;
+        const evStart = new Date(ev.start).getTime();
+        const evEnd = ev.end ? new Date(ev.end).getTime() : now.getTime();
+        const s = Math.max(bucketStart.getTime(), evStart);
+        const e = Math.min(bucketEnd.getTime(), evEnd);
+        if (e > s) {
+          online = 1; // mark as online if any overlap
+          break;
+        }
+      }
+
+      points.push({ time: bucketStart.toISOString(), online });
+      t = bucketEnd;
+    }
+
+    return res.json({
+      ok: true,
+      swarmId: String(user.activeSwarm),
+      swarmName: swarm?.name || null,
+      bucketHours: 1,
+      hours: 24,
+      now,
+      points,
+    });
+  } catch (err) {
+    console.error("getActiveUptimeLine24h failed:", err);
+    return res.status(500).json({ error: "Failed to compute uptime line data" });
+  }
+}
+
