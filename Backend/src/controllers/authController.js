@@ -87,13 +87,13 @@ export async function mintProviderClaimToken(req, res) {
     const doc = await Auth.findById(req.user.uid).select("providerClaim");
     const now = new Date();
 
-    if (!renew && doc?.providerClaim && !doc.providerClaim.usedAt && doc.providerClaim.expiresAt > now) {
-      return res.status(200).json({
-        token: null,                // we don't store plaintext
-        expiresAt: doc.providerClaim.expiresAt,
-        alreadyExists: true,
-      });
-    }
+    // if (!renew && doc?.providerClaim && !doc.providerClaim.usedAt && doc.providerClaim.expiresAt > now) {
+    //   return res.status(200).json({
+    //     token: null,                // we don't store plaintext
+    //     expiresAt: doc.providerClaim.expiresAt,
+    //     alreadyExists: true,
+    //   });
+    // }
 
     const { token, expiresAt } = await generateProviderClaimForUser(req.user.uid);
     return res.json({ token, expiresAt, alreadyExists: false });

@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const swarmSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
   swarmkey: { type: String, required: true },
   password: { type: String, required: true },
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Auth' }],

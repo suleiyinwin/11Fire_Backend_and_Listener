@@ -31,7 +31,7 @@ export async function claimPeerId(req, res) {
     if (!userDoc) return res.status(401).json({ error: 'Invalid or expired token' });
 
     userDoc.peerId = peerId;                 
-    userDoc.providerClaim.usedAt = now;      // make the token one-time
+    // userDoc.providerClaim.usedAt = now;      // make the token one-time
     await userDoc.save();
 
     return res.json({ ok: true, userId: String(userDoc._id) });
