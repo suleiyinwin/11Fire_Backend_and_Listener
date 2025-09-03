@@ -10,6 +10,8 @@ import {
   measureRtt,
   unpinCid,
 } from "../ws/providerRegistry.js";
+import { getOrCreateSwarmDataKey, getSwarmDataKey } from "../utils/datakey.js";
+import { encryptEnvelopeGCM, decryptEnvelopeGCM } from "../utils/crypto.js";
 
 import bootstrapController from "./bootstrapController.js";
 
@@ -165,8 +167,17 @@ export async function uploadAndReplicate(req, res) {
 
     // 1) Upload to bootstrap
     const fileName = req.file.originalname || "upload.bin";
-    const size = req.file.size;
-    const cid = await uploadViaBootstrap(fileName, req.file.buffer);
+    const plain = req.file.buffer;
+    const size = plain.length;
+
+    // fetch/create per-swarm data key (NOT the swarmkey)
+    const dataKey = await getOrCreateSwarmDataKey(user.activeSwarm);
+
+    // encrypt locally; envelope is what we store
+    const envelope = encryptEnvelopeGCM(plain, dataKey);
+
+    // get CID for encrypted bytes
+    const cid = await uploadViaBootstrap(fileName, envelope);
 
     // 2) Avoid duplicate: if file metadata exists in this swarm, reuse
     let fileDoc = await FileModel.findOne({ cid, swarm: user.activeSwarm });
@@ -194,12 +205,15 @@ export async function uploadAndReplicate(req, res) {
         name: fileName,
         cid,
         size,
+        encSize: envelope.length,
         date: new Date(),
         isFile: true,
         ownerId: user._id,
         storedIds: pinnedUserIds.map((id) => id),
         sharedIds: [],
         swarm: user.activeSwarm,
+        enc: true,
+        encAlgo: "aes-gcm@v1",
       });
     } else {
       // merge without duplicates
@@ -250,13 +264,23 @@ export async function downloadFile(req, res) {
 
     const buf = await downloadViaBootstrap(cid);
 
+    // derive swarm data key and decrypt envelope
+    let plain;
+    try {
+      const dataKey = await getSwarmDataKey(fileDoc.swarm);
+      plain = decryptEnvelopeGCM(buf, dataKey);
+    } catch (e) {
+      console.error("decryptEnvelopeGCM failed:", e);
+      return res.status(500).json({ error: "Decryption failed" });
+    }
+
     res.setHeader("Content-Type", "application/octet-stream");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${fileDoc.name || cid}"`
     );
-    res.setHeader("Content-Length", String(buf.length));
-    return res.status(200).send(buf);
+    res.setHeader("Content-Length", String(plain.length));
+    return res.status(200).send(plain);
   } catch (err) {
     console.error("downloadFile failed:", err);
     const msg = /connected/i.test(String(err?.message || ""))
