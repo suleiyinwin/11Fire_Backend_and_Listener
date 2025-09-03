@@ -8,6 +8,7 @@ import authRouter from './routes/authRouter.js';
 import swarmRouter from './routes/swarmRouter.js';
 import providerRouter from './routes/providerRouter.js';
 import fileRouter from './routes/fileRouter.js';
+import providerNodeRouter from './routes/providerNodeRouter.js';
 import bootstrapListener from './routes/bootstrapRouter.js';
 import cookieParser from 'cookie-parser';
 import { attachUser } from './middlewares/authMiddleware.js';
@@ -32,6 +33,7 @@ app.use('/auth', authRouter);
 app.use('/swarms', swarmRouter);
 app.use('/providers', providerRouter);
 app.use('/files', fileRouter);
+app.use('/provider-node', providerNodeRouter);
 
 app.listen(port, () => console.log(`REST API server running on port ${port}`));
 

@@ -87,13 +87,13 @@ export async function mintProviderClaimToken(req, res) {
     const doc = await Auth.findById(req.user.uid).select("providerClaim");
     const now = new Date();
 
-    if (!renew && doc?.providerClaim && !doc.providerClaim.usedAt && doc.providerClaim.expiresAt > now) {
-      return res.status(200).json({
-        token: null,                // we don't store plaintext
-        expiresAt: doc.providerClaim.expiresAt,
-        alreadyExists: true,
-      });
-    }
+    // if (!renew && doc?.providerClaim && !doc.providerClaim.usedAt && doc.providerClaim.expiresAt > now) {
+    //   return res.status(200).json({
+    //     token: null,                // we don't store plaintext
+    //     expiresAt: doc.providerClaim.expiresAt,
+    //     alreadyExists: true,
+    //   });
+    // }
 
     const { token, expiresAt } = await generateProviderClaimForUser(req.user.uid);
     return res.json({ token, expiresAt, alreadyExists: false });
@@ -144,7 +144,10 @@ export async function setActiveSwarm(req, res, next) {
     user.activeSwarm = swarmId;
     await user.save();
 
-    res.json({ ok: true, activeSwarm: swarmId, role: mem.role });
+    const SwarmModel = (await import("../models/Swarm.js")).default;
+    const swarm = await SwarmModel.findById(swarmId).select("name").lean();
+
+    res.json({ ok: true, activeSwarm: swarmId, swarmName: swarm?.name || null, role: mem.role });
   } catch (err) {
     next(err);
   }
@@ -204,9 +207,14 @@ export async function setActiveSwarmQuota(req, res, next) {
     if (!result.ok) return res.status(result.status).json({ error: result.error });
 
     const m = result.membership;
+
+    const SwarmModel = (await import("../models/Swarm.js")).default;
+    const swarm = await SwarmModel.findById(user.activeSwarm).select("name").lean();
+
     return res.json({
       ok: true,
       swarmId: String(user.activeSwarm),
+      swarmName: swarm?.name || null,
       quotaBytes: m.quotaBytes,      
       quotaGB: bytesToGb(m.quotaBytes),   
       role: m.role,
