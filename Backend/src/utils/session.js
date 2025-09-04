@@ -4,14 +4,14 @@ const COOKIE_NAME = 'sid';
 
 export function issueSession(res, payload) {
   // payload shape: { uid, ms: { oid, tid }, activeSwarm? }
-  const token = jwt.sign(payload, process.env.APP_JWT_SECRET, { expiresIn: '2h' });
+  const token = jwt.sign(payload, process.env.APP_JWT_SECRET, { expiresIn: '12h' });
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     // secure: process.env.NODE_ENV === 'production', //only for HTTPS
     secure: false, // For development, set to false. Change to true in production.
     sameSite: 'strict',
     path: '/',
-    maxAge: 2 * 60 * 60 * 1000,
+    maxAge: 12 * 60 * 60 * 1000,
   });
 }
 
