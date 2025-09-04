@@ -12,7 +12,7 @@ import {
 } from "../ws/providerRegistry.js";
 import { getOrCreateSwarmDataKey, getSwarmDataKey } from "../utils/datakey.js";
 import { encryptEnvelopeGCM, decryptEnvelopeGCM } from "../utils/crypto.js";
-
+import JSZip from 'jszip';
 import bootstrapController from "./bootstrapController.js";
 
 /** Sum of bytes a provider stores within one swarm (based on FileModel) */
@@ -335,6 +335,250 @@ export async function deleteFile(req, res) {
   } catch (err) {
     console.error("deleteFile failed:", err);
     return res.status(500).json({ error: "Delete failed" });
+  }
+}
+
+
+/** Download multiple files as a ZIP archive */
+export async function downloadMultipleFiles(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    
+    const { cids } = req.body;
+    if (!Array.isArray(cids) || cids.length === 0) {
+      return res.status(400).json({ error: "Missing or empty cids array" });
+    }
+    
+    if (cids.length > 100) {
+      return res.status(400).json({ error: "Too many files (max 100)" });
+    }
+
+    const user = await Auth.findById(req.user.uid);
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+    // Find all files and check access
+    const filesDocs = await FileModel.find({ cid: { $in: cids } });
+    const accessibleFiles = [];
+    
+    for (const fileDoc of filesDocs) {
+      // Access control: owner or explicitly shared
+      const isOwner = String(fileDoc.ownerId) === String(user._id);
+      const isShared = (fileDoc.sharedIds || []).some(
+        (id) => String(id) === String(user._id)
+      );
+      
+      if (isOwner || isShared) {
+        accessibleFiles.push(fileDoc);
+      } else {
+        // Beta implementation: check swarm membership
+        const mem = user.getMembership(fileDoc.swarm);
+        if (mem) {
+          accessibleFiles.push(fileDoc);
+        }
+      }
+    }
+
+    if (accessibleFiles.length === 0) {
+      return res.status(403).json({ error: "No accessible files found" });
+    }
+
+    // Download and decrypt all files
+    const fileContents = [];
+    const errors = [];
+    
+    for (const fileDoc of accessibleFiles) {
+      try {
+        const buf = await downloadViaBootstrap(fileDoc.cid);
+        const dataKey = await getSwarmDataKey(fileDoc.swarm);
+        const plain = decryptEnvelopeGCM(buf, dataKey);
+        
+        fileContents.push({
+          name: fileDoc.name || fileDoc.cid,
+          content: plain,
+          cid: fileDoc.cid
+        });
+      } catch (e) {
+        console.error(`Failed to download ${fileDoc.cid}:`, e);
+        errors.push({
+          cid: fileDoc.cid,
+          name: fileDoc.name,
+          error: e.message
+        });
+      }
+    }
+
+    if (fileContents.length === 0) {
+      return res.status(503).json({ 
+        error: "Failed to download any files",
+        errors 
+      });
+    }
+
+    // If only one file, return it directly
+    if (fileContents.length === 1) {
+      const file = fileContents[0];
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${file.name}"`
+      );
+      res.setHeader("Content-Length", String(file.content.length));
+      return res.status(200).send(file.content);
+    }
+
+    // Multiple files: create ZIP
+    const zip = new JSZip();
+    
+    // Add files to ZIP
+    fileContents.forEach(file => {
+      zip.file(file.name, file.content);
+    });
+    
+    // Add error log if there were any failures
+    if (errors.length > 0) {
+      const errorLog = errors.map(e => 
+        `${e.cid} (${e.name}): ${e.error}`
+      ).join('\n');
+      zip.file('download_errors.txt', errorLog);
+    }
+
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+    
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="11fire_files_${Date.now()}.zip"`
+    );
+    res.setHeader("Content-Length", String(zipBuffer.length));
+    
+    return res.status(200).send(zipBuffer);
+
+  } catch (err) {
+    console.error("downloadMultipleFiles failed:", err);
+    const msg = /connected/i.test(String(err?.message || ""))
+      ? "Bootstrap not connected"
+      : "Download failed";
+    return res.status(503).json({ error: msg });
+  }
+}
+
+/** Delete multiple files by CIDs (owner-only for each file) */
+export async function deleteMultipleFiles(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    
+    const { cids } = req.body;
+    if (!Array.isArray(cids) || cids.length === 0) {
+      return res.status(400).json({ error: "Missing or empty cids array" });
+    }
+    
+    if (cids.length > 100) {
+      return res.status(400).json({ error: "Too many files (max 100)" });
+    }
+
+    // Find all files and check ownership
+    const filesDocs = await FileModel.find({ cid: { $in: cids } });
+    const ownedFiles = filesDocs.filter(
+      fileDoc => String(fileDoc.ownerId) === String(req.user.uid)
+    );
+    
+    if (ownedFiles.length === 0) {
+      return res.status(403).json({ 
+        error: "No owned files found to delete",
+        requested: cids.length,
+        found: filesDocs.length
+      });
+    }
+
+    const results = {
+      successful: [],
+      failed: [],
+      notFound: [],
+      notOwned: []
+    };
+
+    // Track which CIDs were found
+    const foundCids = new Set(filesDocs.map(f => f.cid));
+    const ownedCids = new Set(ownedFiles.map(f => f.cid));
+    
+    // Categorize not found and not owned
+    cids.forEach(cid => {
+      if (!foundCids.has(cid)) {
+        results.notFound.push(cid);
+      } else if (!ownedCids.has(cid)) {
+        results.notOwned.push(cid);
+      }
+    });
+
+    // Process each owned file
+    for (const fileDoc of ownedFiles) {
+      const cid = fileDoc.cid;
+      
+      try {
+        // Get providers for this swarm
+        const swarmId = fileDoc.swarm;
+        const providers = await getOnlineProvidersForSwarm(swarmId);
+        
+        // Unpin from all providers (parallel for speed)
+        const unpinPromises = providers.map(async (p) => {
+          try {
+            await unpinCid(p.ws, cid);
+            console.log(`[deleteMultipleFiles] Unpinned ${cid} from provider ${p.userId}`);
+            return { success: true, providerId: p.userId };
+          } catch (e) {
+            console.error(`[deleteMultipleFiles] Failed to unpin ${cid} from ${p.userId}:`, e.message);
+            return { success: false, providerId: p.userId, error: e.message };
+          }
+        });
+        
+        const unpinResults = await Promise.allSettled(unpinPromises);
+        
+        // Unpin from bootstrap
+        const sock = bootstrapController.getSocket();
+        if (sock && sock.readyState === 1) {
+          sock.send(`unpin|${cid}`);
+        }
+
+        // Remove metadata
+        await FileModel.deleteOne({ _id: fileDoc._id });
+        
+        results.successful.push({
+          cid,
+          name: fileDoc.name,
+          unpinResults: unpinResults.map((r, i) => ({
+            providerId: providers[i]?.userId,
+            success: r.status === 'fulfilled' && r.value.success,
+            error: r.status === 'rejected' ? r.reason?.message : r.value?.error
+          }))
+        });
+        
+      } catch (err) {
+        console.error(`[deleteMultipleFiles] Failed to delete ${cid}:`, err);
+        results.failed.push({
+          cid,
+          name: fileDoc.name,
+          error: err.message
+        });
+      }
+    }
+
+    const summary = {
+      total: cids.length,
+      successful: results.successful.length,
+      failed: results.failed.length,
+      notFound: results.notFound.length,
+      notOwned: results.notOwned.length
+    };
+
+    return res.json({
+      ok: true,
+      summary,
+      results
+    });
+
+  } catch (err) {
+    console.error("deleteMultipleFiles failed:", err);
+    return res.status(500).json({ error: "Bulk delete failed" });
   }
 }
 
