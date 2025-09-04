@@ -5,6 +5,8 @@ import {
   uploadAndReplicate,
   downloadFile,
   deleteFile,
+  downloadMultipleFiles,
+  deleteMultipleFiles, 
   listMyFilesInActiveSwarm,
   renameFile
 } from "../controllers/fileController.js";
@@ -37,14 +39,18 @@ router.post(
 
 // download by CID
 router.get("/download/:cid", requireAuth, downloadFile);
+router.post("/download-multiple", requireAuth, downloadMultipleFiles);
 
 // Delete a file by CID (owner-only)
 router.delete("/delete/:cid", requireAuth, deleteFile);
+router.delete("/delete-multiple", requireAuth, deleteMultipleFiles);
 
 // List my files in active swarm
 router.get("/mine", requireAuth, listMyFilesInActiveSwarm);
 
 // Rename a file by CID (owner-only)
 router.patch("/rename/:cid", requireAuth, renameFile);
+
+
 
 export default router;
