@@ -15,7 +15,7 @@ export function attachUser(req, _res, next) {
     }
     
     req.user = decoded;
-    console.log("Decoded JWT:", req.user); 
+    // console.log("Decoded JWT:", req.user); 
   } catch (err) {
     console.error("JWT verification failed:", err);
   }

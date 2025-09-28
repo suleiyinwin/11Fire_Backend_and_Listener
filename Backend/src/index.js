@@ -21,10 +21,19 @@ const port = process.env.HTTP_PORT || 3001;
 mongoose.connect(process.env.MONGODB_URI|| 'mongodb://localhost:27017/11fire').then(() => console.log('MongoDB connected')).catch(err => console.error('MongoDB connection error:', err));
 
 
+const allowed = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS,
-  credentials: true, 
+  origin: function(origin, cb) {
+    if (!origin) return cb(null, true);
+    if (allowed.length === 0 || allowed.includes(origin)) return cb(null, true);
+    cb(new Error('CORS not allowed'));
+  },
+  credentials: true,
 }));
+
 app.use(express.json());
 app.use(cookieParser());
 app.use(attachUser);  
