@@ -27,12 +27,13 @@ const swarmSchema = new mongoose.Schema(
 
     // NEW: encrypted data key for file encryption (separate from swarmkey)
     enc: { type: encSchema, default: null },
+    tenantId: { type: String, required: true },
   },
   { timestamps: true }
 );
 
 // enforce uniqueness
-swarmSchema.index({ name: 1 }, { unique: true });
+swarmSchema.index({ name: 1, tenantId: 1 }, { unique: true, name: 'uniq_name_per_tenant' });
 
 const Swarm = mongoose.model("Swarm", swarmSchema);
 export default Swarm;

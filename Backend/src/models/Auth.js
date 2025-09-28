@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const MsIdentitySchema = new mongoose.Schema(
   {
     oid: { type: String, required: true }, // Microsoft user object id
-    tid: { type: String, required: true }, // Tenant id (university)
+    tid: { type: String, required: true }, // Tenant id (organizations only)
     sub: { type: String }, // Subject claim (per app)
     upn: { type: String }, // user@kmutt.ac.th
     preferredUsername: { type: String }, // often same as UPN

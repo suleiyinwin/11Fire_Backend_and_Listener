@@ -34,8 +34,6 @@ export async function callback(req, res, next) {
     });
 
     const c = tokenResp.idTokenClaims || {};
-    if (c.tid !== process.env.AZURE_TENANT_ID)
-      return res.status(403).json({ error: "Wrong tenant" });
 
     const email = c.preferred_username || c.upn || null;
     const username = c.name || email || "User";
@@ -49,7 +47,7 @@ export async function callback(req, res, next) {
           email,
           ms: {
             oid: c.oid,
-            tid: c.tid,
+            tid: c.tid, //Store tenant for isolation
             sub: c.sub,
             upn: c.upn,
             preferredUsername: c.preferred_username,
