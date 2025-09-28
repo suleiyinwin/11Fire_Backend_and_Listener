@@ -69,19 +69,6 @@ jobs:
           echo "AZURE_TENANT_ID=${{ vars.AZURE_TENANT_ID }}"
           echo "AZURE_SUBSCRIPTION_ID=${{ vars.AZURE_SUBSCRIPTION_ID }}"
 
-
-      # - name: Set subscription
-      #   run: az account set --subscription ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Show Azure context
-        run: az account show --query "{tenantId:tenantId,subscriptionId:id,user:user}" -o jsonc
-
-      # 5) Verify the RG and Web App really exist in that subscription
-      - name: Check RG and Web App exist
-        run: |
-          echo "RG id:" && az group show -n elevenfire_group --query id -o tsv
-          echo "Web App id:" && az webapp show -g elevenfire_group -n elevenfire --query id -o tsv
-
       - name: Who am I (debug)
         run: az account show
 
