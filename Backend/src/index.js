@@ -16,7 +16,7 @@ import { attachUser } from './middlewares/authMiddleware.js';
 
 dotenv.config();
 const app = express();
-const port = process.env.HTTP_PORT || 8080;
+const port = process.env.PORT || 3000;
 
 mongoose.connect(process.env.MONGODB_URI|| 'mongodb://localhost:27017/11fire').then(() => console.log('MongoDB connected')).catch(err => console.error('MongoDB connection error:', err));
 
