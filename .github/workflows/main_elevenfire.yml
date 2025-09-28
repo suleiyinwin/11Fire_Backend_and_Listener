@@ -61,7 +61,7 @@ jobs:
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          allow-no-subscriptions: true
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       
       - name: Echo IDs
         run: |
@@ -70,8 +70,8 @@ jobs:
           echo "AZURE_SUBSCRIPTION_ID=${{ vars.AZURE_SUBSCRIPTION_ID }}"
 
 
-      - name: Set subscription
-        run: az account set --subscription ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # - name: Set subscription
+      #   run: az account set --subscription ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Show Azure context
         run: az account show --query "{tenantId:tenantId,subscriptionId:id,user:user}" -o jsonc
