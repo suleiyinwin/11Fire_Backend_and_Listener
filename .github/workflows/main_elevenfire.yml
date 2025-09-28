@@ -20,13 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: List directory contents (debug)
-        run: |
-          echo "Root directory contents:"
-          ls -la
-          echo "Backend directory contents:"
-          ls -la Backend/
-
       - name: Set up Node.js version
         uses: actions/setup-node@v4
         with:
@@ -37,8 +30,6 @@ jobs:
       - name: npm install, build, and test
         run: |
           cd Backend
-          echo "Current directory: $(pwd)"
-          echo "Contents: $(ls -la)"
           npm install
           npm run build --if-present
           npm run test --if-present
