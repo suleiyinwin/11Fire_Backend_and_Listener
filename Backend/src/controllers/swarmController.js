@@ -22,8 +22,13 @@ const createSwarm = async (req, res) => {
   }
 
   try {
+    const tenantId = req.user.ms?.tid;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'User tenant information missing' });
+    }
+
     // check unique swarm name
-    const existing = await Swarm.findOne({ name });
+    const existing = await Swarm.findOne({ name, tenantId });
     if (existing) return res.status(400).json({ error: 'Group name already exists' });
 
     // Generate swarm key using js-ipfs-swarm-key-gen
@@ -42,6 +47,7 @@ const createSwarm = async (req, res) => {
       password: hashed,
       members: [req.user.uid],
       bootstrapId: bootstrap._id,
+      tenantId,
     });
 
     // Link this swarm to user's swarms[] (legacy)
@@ -88,7 +94,12 @@ const joinSwarm = async (req, res) => {
   }
 
   try {
-    const swarm = await Swarm.findOne({name});
+    const tenantId = req.user.ms?.tid;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'User tenant information missing' });
+    }
+
+    const swarm = await Swarm.findOne({ name, tenantId });
     if (!swarm) return res.status(404).json({ error: "Group not found" });
 
     const match = await bcrypt.compare(password, swarm.password);
@@ -145,11 +156,17 @@ const setRole = async (req, res) => {
 
 const listMySwarms = async (req, res) => {
   try {
+    const tenantId = req.user.ms?.tid;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'User tenant information missing' });
+    }
+
     if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
 
     const user = await Auth.findById(req.user.uid).populate(
       "memberships.swarm"
     );
+
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const items = (user.memberships || []).map((m) => ({
