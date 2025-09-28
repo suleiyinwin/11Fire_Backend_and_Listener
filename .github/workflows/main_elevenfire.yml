@@ -69,6 +69,12 @@ jobs:
           echo "AZURE_TENANT_ID=${{ vars.AZURE_TENANT_ID }}"
           echo "AZURE_SUBSCRIPTION_ID=${{ vars.AZURE_SUBSCRIPTION_ID }}"
 
+      - name: Verify permissions
+        run: |
+          az account show --query "{tenantId:tenantId,subscriptionId:id,user:user}" -o jsonc
+          az webapp show -g elevenfire_group -n elevenfire --query "id" -o tsv
+
+
       - name: Who am I (debug)
         run: az account show
 
@@ -77,6 +83,5 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'elevenfire'
-          slot-name: 'Production'
           package: ./Backend
           
