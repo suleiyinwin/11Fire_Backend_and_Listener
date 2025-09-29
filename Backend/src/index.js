@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import cors from 'cors';
+import http from 'http';
 import { WebSocketServer } from 'ws';
 import wsRouter from './routes/wsRouter.js';
 import authRouter from './routes/authRouter.js';
@@ -54,15 +55,17 @@ app.use('/provider-node', providerNodeRouter);
 
 // app.listen(port, () => console.log(`REST API server running on port ${port}`));
 
-const wssProvider = new WebSocketServer({ port: 9090 });
-console.log("WebSocket Server for providers listening on port 9090");
+const server = http.createServer(app);
+
+const wssProvider = new WebSocketServer({ server, path: "/ws/provider" });
+console.log("WebSocket Server for providers attached at /ws/provider");
 wsRouter(wssProvider);
 
-const wssBootstrap = new WebSocketServer({ port: 9091 });
-console.log("WebSocket Server for bootstrap node listening on port 9091");
+const wssBootstrap = new WebSocketServer({ server, path: "/ws/bootstrap" });
+console.log("WebSocket Server for bootstrap node attached at /ws/bootstrap");
 bootstrapListener(wssBootstrap);
 
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
   console.log(`Health check: http://localhost:${port}/health`);
