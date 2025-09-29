@@ -22,18 +22,34 @@ const port = process.env.PORT || 3000;
 mongoose.connect(process.env.MONGODB_URI|| 'mongodb://localhost:27017/11fire').then(() => console.log('MongoDB connected')).catch(err => console.error('MongoDB connection error:', err));
 
 
-const allowed = (process.env.ALLOWED_ORIGINS || '')
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
-app.use(cors({
-  origin: function(origin, cb) {
-    if (!origin) return cb(null, true);
-    if (allowed.length === 0 || allowed.includes(origin)) return cb(null, true);
-    cb(new Error('CORS not allowed'));
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    try {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.length === 0) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      for (const allowed of allowedOrigins) {
+        if (allowed.startsWith('.') && origin.endsWith(allowed)) return callback(null, true);
+      }
+
+      return callback(new Error('CORS: origin not allowed'), false);
+    } catch (err) {
+      console.error('CORS origin check error:', err);
+      return callback(new Error('CORS check failed'), false);
+    }
   },
   credentials: true,
-}));
+};
+
+app.use(cors(corsOptions));
 
 app.get('/health', (req, res) => {
   res.status(200).json({ 
