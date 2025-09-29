@@ -10,5 +10,6 @@ router.post('/set-role', requireAuth, swarmController.setRole); // optional lega
 router.get('/my-swarms', requireAuth, swarmController.listMySwarms);
 router.post('/name-check', requireAuth, swarmController.swarmNameCheck);
 router.post('/password-check', swarmController.swarmPasswordCheck);
+router.post('/leave', requireAuth, swarmController.leaveSwarm);
 
 export default router;
