@@ -9,7 +9,7 @@ export function issueSession(res, payload) {
     httpOnly: true,
     // secure: process.env.NODE_ENV === 'production', //only for HTTPS
     secure: true, // For development, set to false. Change to true in production.
-    sameSite: 'lax',
+    sameSite: 'none',
     path: '/',
     maxAge: 12 * 60 * 60 * 1000,
   });
@@ -25,7 +25,7 @@ export function clearSession(res) {
     httpOnly: true,
     // secure: process.env.NODE_ENV === 'production', //only for HTTPS
     secure: true, // For development, set to false. Change to true in production.
-    sameSite: 'lax',
+    sameSite: 'none',
     path: '/',
   });
 }
