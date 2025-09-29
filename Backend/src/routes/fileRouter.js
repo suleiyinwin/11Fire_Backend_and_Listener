@@ -8,7 +8,9 @@ import {
   downloadMultipleFiles,
   deleteMultipleFiles, 
   listMyFilesInActiveSwarm,
-  renameFile
+  renameFile,
+  shareFile,
+  listFilesSharedWithMe
 } from "../controllers/fileController.js";
 
 const upload = multer({
@@ -51,6 +53,11 @@ router.get("/mine", requireAuth, listMyFilesInActiveSwarm);
 // Rename a file by CID (owner-only)
 router.patch("/rename/:cid", requireAuth, renameFile);
 
+// Share a file by CID (owner-only)
+router.post("/share/:cid", requireAuth, shareFile);
+
+// list files shared with current user in active swarm
+router.get("/shared", requireAuth, listFilesSharedWithMe);
 
 
 export default router;
