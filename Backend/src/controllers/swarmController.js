@@ -4,7 +4,12 @@ import Bootstrap from "../models/Bootstrap.js";
 import Auth from "../models/Auth.js";
 import { upsertMembershipForUser } from "../utils/membershipUtils.js";
 import { setActiveSwarmBackend } from "../controllers/authController.js";
-import generator from "js-ipfs-swarm-key-gen";
+import crypto from "crypto";
+
+function generateSwarmKeyV1() {
+  const hex = crypto.randomBytes(32).toString("hex");
+  return `/key/swarm/psk/1.0.0/\n/base16\n${hex}`;
+}
 
 const createSwarm = async (req, res) => {
   const { name, password, role } = req.body;
@@ -32,8 +37,7 @@ const createSwarm = async (req, res) => {
     if (existing) return res.status(400).json({ error: 'Group name already exists' });
 
     // Generate swarm key using js-ipfs-swarm-key-gen
-    const swarmKeyObj = await generator();
-    const key = swarmKeyObj.key;
+    const key = generateSwarmKeyV1();
 
     // Find available bootstrap
     const bootstrap = await Bootstrap.findOne({ isUsed: false });
