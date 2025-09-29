@@ -73,12 +73,28 @@ app.use('/provider-node', providerNodeRouter);
 
 const server = http.createServer(app);
 
-const wssProvider = new WebSocketServer({ server, path: "/ws/provider" });
-console.log("WebSocket Server for providers attached at /ws/provider");
-wsRouter(wssProvider);
+// Provider WS
+const wssProvider = new WebSocketServer({ noServer: true });
+server.on("upgrade", (req, socket, head) => {
+  if (req.url === "/ws/provider") {
+    wssProvider.handleUpgrade(req, socket, head, ws => {
+      wssProvider.emit("connection", ws, req);
+    });
+  }
+});
 
-const wssBootstrap = new WebSocketServer({ server, path: "/ws/bootstrap" });
-console.log("WebSocket Server for bootstrap node attached at /ws/bootstrap");
+// Bootstrap WS
+const wssBootstrap = new WebSocketServer({ noServer: true });
+server.on("upgrade", (req, socket, head) => {
+  if (req.url === "/ws/bootstrap") {
+    wssBootstrap.handleUpgrade(req, socket, head, ws => {
+      wssBootstrap.emit("connection", ws, req);
+    });
+  }
+});
+
+// Register handlers
+wsRouter(wssProvider);
 bootstrapListener(wssBootstrap);
 
 server.listen(port, () => {
