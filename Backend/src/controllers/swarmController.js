@@ -5,6 +5,10 @@ import Auth from "../models/Auth.js";
 import { upsertMembershipForUser } from "../utils/membershipUtils.js";
 import { setActiveSwarmBackend } from "../controllers/authController.js";
 import crypto from "crypto";
+import {
+  deleteAllFilesForOwnerInSwarm,
+  migrateAllFilesFromProviderInSwarm,
+} from "../helpers/migrationHelper.js";
 
 function generateSwarmKeyV1() {
   const hex = crypto.randomBytes(32).toString("hex");
@@ -14,10 +18,14 @@ function generateSwarmKeyV1() {
 const createSwarm = async (req, res) => {
   const { name, password, role } = req.body;
   if (!name || !password || !role) {
-    return res.status(400).json({ error: 'name, password, and role are required' });
+    return res
+      .status(400)
+      .json({ error: "name, password, and role are required" });
   }
   if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    return res
+      .status(400)
+      .json({ error: "Password must be at least 8 characters" });
   }
 
   if (!["user", "provider"].includes(role)) {
@@ -29,12 +37,13 @@ const createSwarm = async (req, res) => {
   try {
     const tenantId = req.user.ms?.tid;
     if (!tenantId) {
-      return res.status(400).json({ error: 'User tenant information missing' });
+      return res.status(400).json({ error: "User tenant information missing" });
     }
 
     // check unique swarm name
     const existing = await Swarm.findOne({ name, tenantId });
-    if (existing) return res.status(400).json({ error: 'Group name already exists' });
+    if (existing)
+      return res.status(400).json({ error: "Group name already exists" });
 
     // Generate swarm key using js-ipfs-swarm-key-gen
     const key = generateSwarmKeyV1();
@@ -81,7 +90,11 @@ const createSwarm = async (req, res) => {
     // const socket = bootstrapController.getSocket(bootstrap.peerId);
     // if (socket?.readyState === 1) socket.send(`swarmkey|${key}`);
 
-    res.json({ message: "Group created", swarmId: swarm._id, name: swarm.name});
+    res.json({
+      message: "Group created",
+      swarmId: swarm._id,
+      name: swarm.name,
+    });
   } catch (err) {
     console.error("Group creation failed:", err);
     res.status(500).json({ error: "Group creation failed" });
@@ -91,16 +104,20 @@ const createSwarm = async (req, res) => {
 const joinSwarm = async (req, res) => {
   const { name, password, role } = req.body;
   if (!name || !password || !role) {
-    return res.status(400).json({ error: 'name, password, and role are required' });
+    return res
+      .status(400)
+      .json({ error: "name, password, and role are required" });
   }
-  if (!['user', 'provider'].includes(role)) {
-    return res.status(400).json({ error: 'Valid role (user|provider) required' });
+  if (!["user", "provider"].includes(role)) {
+    return res
+      .status(400)
+      .json({ error: "Valid role (user|provider) required" });
   }
 
   try {
     const tenantId = req.user.ms?.tid;
     if (!tenantId) {
-      return res.status(400).json({ error: 'User tenant information missing' });
+      return res.status(400).json({ error: "User tenant information missing" });
     }
 
     const swarm = await Swarm.findOne({ name, tenantId });
@@ -121,12 +138,16 @@ const joinSwarm = async (req, res) => {
     }
 
     // Upsert membership with role
-    await upsertMembershipForUser(user, { swarmId : swarm._id, role });
+    await upsertMembershipForUser(user, { swarmId: swarm._id, role });
 
     // Put it in activeSwarm
     await setActiveSwarmBackend(req.user.uid, swarm._id);
 
-    res.json({ ok: true, message: 'Joined group successfully', name: swarm.name });
+    res.json({
+      ok: true,
+      message: "Joined group successfully",
+      name: swarm.name,
+    });
   } catch (err) {
     console.error("Join group failed:", err);
     res.status(500).json({ error: "Failed to join group" });
@@ -162,7 +183,7 @@ const listMySwarms = async (req, res) => {
   try {
     const tenantId = req.user.ms?.tid;
     if (!tenantId) {
-      return res.status(400).json({ error: 'User tenant information missing' });
+      return res.status(400).json({ error: "User tenant information missing" });
     }
 
     if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
@@ -201,12 +222,12 @@ const swarmNameCheck = async (req, res) => {
     if (!swarm) {
       return res.json({ ok: true });
     }
-    return res.status(400).json({ error: 'Group name already exists' });
+    return res.status(400).json({ error: "Group name already exists" });
   } catch (err) {
     console.error("Gruop name check failed:", err);
     return res.status(500).json({ error: "Failed to check group name" });
   }
-}
+};
 
 const swarmPasswordCheck = async (req, res) => {
   const { name, password } = req.body;
@@ -230,6 +251,70 @@ const swarmPasswordCheck = async (req, res) => {
     console.error("Group password check failed:", err);
     return res.status(500).json({ error: "Failed to check group password" });
   }
-}
+};
 
-export default { createSwarm, joinSwarm, setRole, listMySwarms, swarmNameCheck, swarmPasswordCheck };
+const leaveSwarm = async (req, res) => {
+  try {
+    const userId = req.user?.uid;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Resolve target swarm
+    const me = await Auth.findById(userId).select("memberships activeSwarm");
+    if (!me) return res.status(401).json({ error: "Unauthorized" });
+
+    const swarmId = req.body?.swarmId || me.activeSwarm;
+    if (!swarmId)
+      return res.status(400).json({ error: "No swarm specified/active" });
+
+    // Determine the caller's role inside that swarm
+    const mem = (me.memberships || []).find(
+      (m) => String(m.swarm) === String(swarmId)
+    );
+    if (!mem)
+      return res.status(404).json({ error: "Not a member of this swarm" });
+
+    const role = mem.role; // "user" | "provider"
+
+    // 1) Always delete files *owned* by the leaver
+    const deletedCount = await deleteAllFilesForOwnerInSwarm(userId, swarmId);
+
+    let migratedFiles = 0;
+    let skippedMigrations = 0;
+
+    // 2) If provider, migrate files they were *storing* (not just owning)
+    if (role === "provider") {
+      const r = await migrateAllFilesFromProviderInSwarm(userId, swarmId);
+      migratedFiles = r.migratedFiles;
+      skippedMigrations = r.skippedMigrations;
+    }
+
+    // 3) Remove membership and clear activeSwarm if it matches
+    await Auth.updateOne(
+      { _id: userId },
+      {
+        $pull: { memberships: { swarm: swarmId } },
+        ...(String(me.activeSwarm) === String(swarmId)
+          ? { $set: { activeSwarm: null } }
+          : {}),
+      }
+    );
+
+    return res.json({
+      ok: true,
+      details: { deletedCount, migratedFiles, skippedMigrations },
+    });
+  } catch (e) {
+    console.error("leaveSwarm failed:", e);
+    return res.status(500).json({ error: "leave failed" });
+  }
+};
+
+export default {
+  createSwarm,
+  joinSwarm,
+  setRole,
+  listMySwarms,
+  swarmNameCheck,
+  swarmPasswordCheck,
+  leaveSwarm
+};
