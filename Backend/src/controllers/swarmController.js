@@ -44,10 +44,19 @@ const createSwarm = async (req, res) => {
     const existing = await Swarm.findOne({ name, tenantId });
     if (existing)
       return res.status(400).json({ error: "Group name already exists" });
+    
+    // Use same swarm keys for same tenant
+    let key;
+    const existingSwarm = await Swarm.findOne({ tenantId });
+    if (existingSwarm) {
+      key = existingSwarm.swarmkey;
+    }
+    else {
+      key = generateSwarmKeyV1();
 
+    }
     // Generate swarm key using js-ipfs-swarm-key-gen
-    const key = generateSwarmKeyV1();
-
+    
     // Find available bootstrap
     const bootstrap = await Bootstrap.findOne({ isUsed: false });
     if (!bootstrap)
