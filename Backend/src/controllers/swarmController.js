@@ -44,19 +44,17 @@ const createSwarm = async (req, res) => {
     const existing = await Swarm.findOne({ name, tenantId });
     if (existing)
       return res.status(400).json({ error: "Group name already exists" });
-    
+
     // Use same swarm keys for same tenant
     let key;
     const existingSwarm = await Swarm.findOne({ tenantId });
     if (existingSwarm) {
       key = existingSwarm.swarmkey;
-    }
-    else {
+    } else {
       key = generateSwarmKeyV1();
-
     }
     // Generate swarm key using js-ipfs-swarm-key-gen
-    
+
     // Find available bootstrap
     const bootstrap = await Bootstrap.findOne({ isUsed: false });
     if (!bootstrap)
@@ -308,6 +306,36 @@ const leaveSwarm = async (req, res) => {
       }
     );
 
+    // 4) If this user was the *last* member in the swarm, clean up the swarm & bootstrap
+    // We check remaining Auth documents that still reference this swarm.
+    const remaining = await Auth.countDocuments({
+      "memberships.swarm": swarmId,
+    });
+    let swarmDeleted = false;
+    let filesDeletedInSwarm = 0;
+
+    if (remaining === 0) {
+      // Best-effort: delete *all* files in the swarm (metadata + unpin bootstrap/providers)
+      filesDeletedInSwarm = await deleteAllFilesInSwarm(swarmId);
+
+      // Mark swarm's bootstrap as unused and clear its swarm field
+      const swarmDoc = await Swarm.findById(swarmId).select("bootstrapId");
+      if (swarmDoc?.bootstrapId) {
+        try {
+          await Bootstrap.updateOne(
+            { _id: swarmDoc.bootstrapId },
+            { $set: { isUsed: false, swarm: null } }
+          );
+        } catch (e) {
+          console.warn("Bootstrap update after last-leave failed:", e?.message);
+        }
+      }
+
+      // Finally, delete the swarm itself
+      await Swarm.deleteOne({ _id: swarmId });
+      swarmDeleted = true;
+    }
+
     return res.json({
       ok: true,
       details: { deletedCount, migratedFiles, skippedMigrations },
@@ -325,5 +353,5 @@ export default {
   listMySwarms,
   swarmNameCheck,
   swarmPasswordCheck,
-  leaveSwarm
+  leaveSwarm,
 };
