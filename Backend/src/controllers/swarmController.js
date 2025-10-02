@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import Swarm from "../models/Swarm.js";
 import Bootstrap from "../models/Bootstrap.js";
 import Auth from "../models/Auth.js";
-import FileModel from "../models/File.js";
+import FileModel from "../models/FileModel.js";
 import { upsertMembershipForUser } from "../utils/membershipUtils.js";
 import { setActiveSwarmBackend } from "../controllers/authController.js";
 import crypto from "crypto";
