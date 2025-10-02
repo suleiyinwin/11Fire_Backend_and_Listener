@@ -306,6 +306,9 @@ const leaveSwarm = async (req, res) => {
       }
     );
 
+    // Remove the user from swarm's members[]
+    await Swarm.updateOne({ _id: swarmId }, { $pull: { members: userId } });
+
     // 4) If this user was the *last* member in the swarm, clean up the swarm & bootstrap
     // We check remaining Auth documents that still reference this swarm.
     const remaining = await Auth.countDocuments({
