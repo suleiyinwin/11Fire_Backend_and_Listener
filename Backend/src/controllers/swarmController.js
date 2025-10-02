@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import Swarm from "../models/Swarm.js";
 import Bootstrap from "../models/Bootstrap.js";
 import Auth from "../models/Auth.js";
+import FileModel from "../models/File.js";
 import { upsertMembershipForUser } from "../utils/membershipUtils.js";
 import { setActiveSwarmBackend } from "../controllers/authController.js";
 import crypto from "crypto";
@@ -315,12 +316,13 @@ const leaveSwarm = async (req, res) => {
       "memberships.swarm": swarmId,
     });
     let swarmDeleted = false;
-    let filesDeletedInSwarm = 0;
-
     if (remaining === 0) {
-      // Best-effort: delete *all* files in the swarm (metadata + unpin bootstrap/providers)
-      filesDeletedInSwarm = await deleteAllFilesInSwarm(swarmId);
-
+      // Check if there is any file left in this swarm (shouldn't be any) and delete them
+      const filesLeft = await FileModel.countDocuments({ swarm: swarmId });
+      if (filesLeft > 0) {
+        await FileModel.deleteMany({ swarm: swarmId });
+      }
+      
       // Mark swarm's bootstrap as unused and clear its swarm field
       const swarmDoc = await Swarm.findById(swarmId).select("bootstrapId");
       if (swarmDoc?.bootstrapId) {
