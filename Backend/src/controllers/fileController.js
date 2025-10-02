@@ -725,14 +725,17 @@ export async function shareFile(req, res) {
       .select("_id email")
       .lean();
 
+    const ownerIdStr = String(file.ownerId);
+    const filteredMatches = matchedUsers.filter((u) => String(u._id) !== ownerIdStr);
+
     const matchedEmails = new Set(
-      matchedUsers.map((u) => (u.email || "").toLowerCase())
+      filteredMatches.map((u) => (u.email || "").toLowerCase())
     );
     const unresolvedEmails = emails.filter(
       (e) => !matchedEmails.has((e || "").toLowerCase())
     );
 
-    const resolvedIds = matchedUsers.map((u) => u._id);
+    const resolvedIds = filteredMatches.map((u) => u._id);
     if (resolvedIds.length > 0) {
       await FileModel.updateOne(
         { cid },
@@ -745,7 +748,7 @@ export async function shareFile(req, res) {
     return res.json({
       ok: true,
       cid,
-      sharedWith: matchedUsers,
+      sharedWith: filteredMatches,
       unresolvedEmails,
       sharedIdsCount: (updated?.sharedIds || []).length,
     });
