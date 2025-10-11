@@ -1,21 +1,37 @@
-import { registerPeer, _internal as regInternal, noteHeartbeat, noteActivity } from "../ws/providerRegistry.js";
+import {
+  registerPeer,
+  _internal as regInternal,
+  noteHeartbeat,
+  noteActivity,
+} from "../ws/providerRegistry.js";
+
+import { emitWsConnection, emitWsDisconnection } from '../utils/eventSystem.js';
 
 export default function wsRouter(wss) {
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    emitWsConnection({
+      type: "provider",
+      remoteAddress: req.socket.remoteAddress,
+      userAgent: req.headers["user-agent"],
+    });
     let identified = false;
     let currentUserId = null;
+    let currentPeerId = null;
 
     ws.on("message", async (buf) => {
       const str = buf.toString();
 
       if (!identified && str.startsWith("id|")) {
         identified = true;
-        const peerId = str.slice(3);
-        console.log(`[providers-ws] Peer connected with id ${peerId}`);
+        currentPeerId = str.slice(3);
+        console.log(`[providers-ws] Peer connected with id ${currentPeerId}`);
         try {
-          const { userId } = await registerPeer(ws, peerId);
+          const { userId } = await registerPeer(ws, currentPeerId);
+          currentUserId = userId;
           console.log(userId);
-          console.log(`[providers-ws] Registered peer ${peerId} for user ${userId}`);
+          console.log(
+            `[providers-ws] Registered peer ${currentPeerId} for user ${userId}`
+          );
         } catch (e) {
           console.error("[providers-ws] registerPeer failed:", e.message);
           ws.close();
@@ -40,7 +56,11 @@ export default function wsRouter(wss) {
     });
 
     ws.on("close", () => {
-      
+      emitWsDisconnection({
+        type: "provider",
+        peerId: currentPeerId,
+        reason: "connection_closed",
+      });
     });
   });
 }
