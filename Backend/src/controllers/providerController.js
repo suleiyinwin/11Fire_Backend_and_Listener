@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
 import Auth from '../models/Auth.js';
+import { emitProviderClaimed } from '../utils/eventSystem.js';
+
 
 /**
  * POST /providers/claim   (no cookie auth – called by headless binary)
@@ -33,6 +35,9 @@ export async function claimPeerId(req, res) {
     userDoc.peerId = peerId;                 
     // userDoc.providerClaim.usedAt = now;      // make the token one-time
     await userDoc.save();
+
+    // Emit provider claimed event
+    emitProviderClaimed(String(userDoc._id), peerId, token);
 
     return res.json({ ok: true, userId: String(userDoc._id) });
   } catch (err) {
