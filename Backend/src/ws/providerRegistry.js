@@ -1,9 +1,17 @@
 import Auth from "../models/Auth.js";
 import ProviderUptimeEvent from "../models/ProviderUptimeEvent.js";
-import { addIntervalToDaily, accrueOpenIntervalToNow } from "../utils/uptimeDaily.js";
+import {
+  addIntervalToDaily,
+  accrueOpenIntervalToNow,
+} from "../utils/uptimeDaily.js";
+import {
+  emitProviderConnected,
+  emitProviderRegistered,
+  emitProviderDisconnected,
+} from "../utils/eventSystem.js";
 
-const byPeerId = new Map();   // peerId -> { ws, userId, lastSeen, avgRttMs }
-const byUserId = new Map();   // userId -> peerId
+const byPeerId = new Map(); // peerId -> { ws, userId, lastSeen, avgRttMs }
+const byUserId = new Map(); // userId -> peerId
 
 const waiters = new WeakMap(); // ws -> Array<{matchFn, resolve, reject, t}>
 
@@ -16,7 +24,7 @@ function _waitFor(ws, matchFn, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const q = _ensureQueue(ws);
     const t = setTimeout(() => {
-      const idx = q.findIndex(w => w.t === t);
+      const idx = q.findIndex((w) => w.t === t);
       if (idx >= 0) q.splice(idx, 1);
       reject(new Error("timeout waiting for provider response"));
     }, timeoutMs);
@@ -34,15 +42,16 @@ function handleMessage(ws, str) {
         q.splice(i, 1);
         return w.resolve(str);
       }
-    } catch {
-    }
+    } catch {}
   }
 }
 
 /** Register first 'id|peerId' and map to Auth userId */
 export async function registerPeer(ws, peerId) {
   // Find which Auth has this peerId (claimed previously)
-  const user = await Auth.findOne({ peerId }).select("_id memberships activeSwarm").lean();
+  const user = await Auth.findOne({ peerId })
+    .select("_id memberships activeSwarm")
+    .lean();
   if (!user) throw new Error("Unknown peerId (not claimed by any user)");
 
   const userId = String(user._id);
@@ -51,10 +60,27 @@ export async function registerPeer(ws, peerId) {
   stateByUser.set(userId, { lastSeen: Date.now(), currentState: "online" });
   await recordTransition(user._id, swarmId, peerId, "online");
 
-  byPeerId.set(peerId, { ws, userId: String(user._id), lastSeen: new Date(), avgRttMs: null });
+  byPeerId.set(peerId, {
+    ws,
+    userId: String(user._id),
+    lastSeen: new Date(),
+    avgRttMs: null,
+  });
   byUserId.set(String(user._id), peerId);
 
+  emitProviderRegistered(String(user._id), peerId);
+  emitProviderConnected({
+    peerId: peerId,
+    username: user.username,
+    swarms: user.memberships?.map((m) => m.swarm) || [],
+  });
+
   ws.on("close", async () => {
+    emitProviderDisconnected({
+      peerId: peerId,
+      username: user.username,
+      reason: "connection_closed",
+    });
     byPeerId.delete(peerId);
     byUserId.delete(String(user._id));
     waiters.delete(ws);
@@ -77,12 +103,20 @@ export async function getOnlineProvidersForSwarm(swarmId) {
   const docs = await Auth.find({
     peerId: { $ne: null },
     memberships: { $elemMatch: { swarm: swarmId, role: "provider" } },
-  }).select("_id peerId").lean();
+  })
+    .select("_id peerId")
+    .lean();
 
   const out = [];
   for (const d of docs) {
     const m = byPeerId.get(d.peerId);
-    if (m?.ws?.readyState === 1) out.push({ userId: String(d._id), peerId: d.peerId, ws: m.ws, avgRttMs: m.avgRttMs ?? null });
+    if (m?.ws?.readyState === 1)
+      out.push({
+        userId: String(d._id),
+        peerId: d.peerId,
+        ws: m.ws,
+        avgRttMs: m.avgRttMs ?? null,
+      });
   }
   return out;
 }
@@ -95,19 +129,24 @@ export async function measureRtt(ws, peerId) {
   await _waitFor(ws, (str) => str.startsWith("cids|"), 10000);
   const ms = Date.now() - started;
 
-  const rec = Array.from(byPeerId.entries()).find(([,v]) => v.ws === ws)?.[1];
+  const rec = Array.from(byPeerId.entries()).find(([, v]) => v.ws === ws)?.[1];
   if (rec) {
     rec.lastSeen = new Date();
-    rec.avgRttMs = rec.avgRttMs == null ? ms : Math.round(rec.avgRttMs * 0.7 + ms * 0.3); // EMA
+    rec.avgRttMs =
+      rec.avgRttMs == null ? ms : Math.round(rec.avgRttMs * 0.7 + ms * 0.3); // EMA
   }
   return ms;
 }
 
-// Ask provider to pin a CID, resolves true/false 
+// Ask provider to pin a CID, resolves true/false
 export async function pinCid(ws, cid, timeoutMs = 5 * 60 * 1000) {
   ws.send(`pin|${cid}`);
   try {
-    const res = await _waitFor(ws, (str) => str.startsWith("Success:") || str.startsWith("Error:"), timeoutMs);
+    const res = await _waitFor(
+      ws,
+      (str) => str.startsWith("Success:") || str.startsWith("Error:"),
+      timeoutMs
+    );
     return res.startsWith("Success:");
   } catch {
     return false;
@@ -118,7 +157,11 @@ export async function pinCid(ws, cid, timeoutMs = 5 * 60 * 1000) {
 export async function unpinCid(ws, cid, timeoutMs = 120000) {
   ws.send(`unpin|${cid}`);
   try {
-    const res = await _waitFor(ws, (str) => str.startsWith("Success:") || str.startsWith("Error:"), timeoutMs);
+    const res = await _waitFor(
+      ws,
+      (str) => str.startsWith("Success:") || str.startsWith("Error:"),
+      timeoutMs
+    );
     return res.startsWith("Success:");
   } catch {
     return false;
@@ -130,7 +173,10 @@ export const _internal = { handleMessage };
 
 /** for testing */
 export function _debugState() {
-  return { byPeerId: Array.from(byPeerId.keys()), byUserId: Array.from(byUserId.keys()) };
+  return {
+    byPeerId: Array.from(byPeerId.keys()),
+    byUserId: Array.from(byUserId.keys()),
+  };
 }
 
 const HEARTBEAT_TIMEOUT_MS = 90_000;
@@ -142,15 +188,32 @@ async function recordTransition(userId, swarmId, peerId, newState) {
 
   // Close any open interval for this user+swarm
   if (swarmId) {
-    const open = await ProviderUptimeEvent.findOne({ userId, swarm: swarmId, end: null }).sort({ start: -1 });
+    const open = await ProviderUptimeEvent.findOne({
+      userId,
+      swarm: swarmId,
+      end: null,
+    }).sort({ start: -1 });
     if (open) {
       open.end = now;
       await open.save();
-      await addIntervalToDaily({ userId, swarmId, state: open.state, start: open.start, end: now });
+      await addIntervalToDaily({
+        userId,
+        swarmId,
+        state: open.state,
+        start: open.start,
+        end: now,
+      });
     }
 
     // Open the new state interval
-    await ProviderUptimeEvent.create({ userId, swarm: swarmId, peerId, state: newState, start: now, end: null });
+    await ProviderUptimeEvent.create({
+      userId,
+      swarm: swarmId,
+      peerId,
+      state: newState,
+      start: now,
+      end: null,
+    });
   }
 }
 
@@ -163,14 +226,17 @@ export async function noteActivity(userId, peerId) {
   if (rec.currentState === "offline") {
     rec.currentState = "online";
     try {
-      await recordTransition(userId, rec.swarmId || null, peerId || byUserId.get(key), "online");
+      await recordTransition(
+        userId,
+        rec.swarmId || null,
+        peerId || byUserId.get(key),
+        "online"
+      );
     } catch (e) {
       console.error("[uptime] activity->online transition failed:", e);
     }
   }
 }
-
-
 
 /** Call from wsRouter on every hb|nonce (or ping if you prefer) */
 export async function noteHeartbeat(userId) {
@@ -196,7 +262,12 @@ setInterval(async () => {
     if (now - rec.lastSeen > HEARTBEAT_TIMEOUT_MS) {
       rec.currentState = "offline";
       try {
-        await recordTransition(userId, rec.swarmId || null, rec.peerId || byUserId.get(userId) || null, "offline");
+        await recordTransition(
+          userId,
+          rec.swarmId || null,
+          rec.peerId || byUserId.get(userId) || null,
+          "offline"
+        );
       } catch (e) {
         console.error("[uptime] timeout transition failed:", e);
       }
@@ -208,7 +279,9 @@ setInterval(async () => {
 setInterval(async () => {
   try {
     const clampSince = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-    const opens = await ProviderUptimeEvent.find({ end: null }).select("userId swarm state start").lean();
+    const opens = await ProviderUptimeEvent.find({ end: null })
+      .select("userId swarm state start")
+      .lean();
     for (const ev of opens) {
       await accrueOpenIntervalToNow({
         userId: ev.userId,
