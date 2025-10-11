@@ -14,6 +14,7 @@ import { getOrCreateSwarmDataKey, getSwarmDataKey } from "../utils/datakey.js";
 import { encryptEnvelopeGCM, decryptEnvelopeGCM } from "../utils/crypto.js";
 import JSZip from "jszip";
 import bootstrapController from "./bootstrapController.js";
+import { emitProviderToPin, emitFileUploaded, emitFileDownloaded, emitProviderToUnpin, emitFileDeleted } from "../utils/eventSystem.js";
 
 /** Sum of bytes a provider stores within one swarm (based on FileModel) */
 async function usedBytesInSwarm(providerUserId, swarmId) {
@@ -194,6 +195,16 @@ export async function uploadAndReplicate(req, res) {
     });
 
     // 4) Pin on each chosen provider (sequential keeps the listener’s simple protocol sane)
+    // Emit intent once: notify listeners which providers we will request to pin
+    try {
+      const providerIds = chosen
+        .map((p) => p.userId || p.peerId)
+        .filter(Boolean);
+      emitProviderToPin(cid, providerIds, user.activeSwarm);
+    } catch (e) {
+      console.warn("emitProviderToPin error:", e?.message || e);
+    }
+
     const pinnedUserIds = await replicateToN(cid, chosen, 3, 3); // need 3, try a few extras
     if (pinnedUserIds.length === 0) {
       return res.status(503).json({ error: "No providers accepted the pin" });
@@ -221,6 +232,24 @@ export async function uploadAndReplicate(req, res) {
       fileDoc.storedIds = merged;
       await fileDoc.save();
     }
+
+    // Emit event: file uploaded
+    emitFileUploaded(
+      {
+        cid: cid,
+        name: fileName,
+        size: size,
+        replicatedTo: pinnedUserIds,
+      },
+      {
+        userId: user._id,
+        username: user.username,
+      },
+      {
+        swarmId: user.activeSwarm,
+        name: swarm.name,
+      }
+    );
 
     return res.json({
       ok: true,
@@ -290,6 +319,19 @@ export async function downloadFile(req, res) {
       `attachment; filename="${fileDoc.name || cid}"`
     );
     res.setHeader("Content-Length", String(plain.length));
+
+    // Emit file downloaded event
+    emitFileDownloaded(
+      {
+        cid: cid,
+        name: fileDoc.name,
+      },
+      {
+        userId: user._id,
+        username: user.username,
+      }
+    );
+
     return res.status(200).send(plain);
   } catch (err) {
     console.error("downloadFile failed:", err);
@@ -319,10 +361,13 @@ export async function deleteFile(req, res) {
 
     // Unpin from all providers
     const swarmId = fileDoc.swarm;
+    //Emit Unpin Provider
+    emitProviderToUnpin(cid, fileDoc.storedIds, swarmId);
     const providers = await getOnlineProvidersForSwarm(swarmId);
     for (const p of providers) {
       try {
         await unpinCid(p.ws, cid);
+
         console.log(`[deleteFile] Unpinned ${cid} from provider ${p.userId}`);
       } catch (e) {
         console.error(
@@ -340,6 +385,23 @@ export async function deleteFile(req, res) {
 
     // Remove metadata
     await FileModel.deleteOne({ _id: fileDoc._id });
+
+     // Emit file deleted event
+    emitFileDeleted(
+      {
+        cid: cid,
+        name: fileDoc.name,
+        size: fileDoc.size,
+      },
+      {
+        userId: user._id,
+        username: user.username,
+      },
+      {
+        swarmId: swarmId,
+      }
+    );
+
 
     return res.json({ ok: true, cid });
   } catch (err) {
@@ -630,7 +692,7 @@ export async function listFilesSharedWithMe(req, res) {
     );
 
     const swarmId = user.activeSwarm;
-    const uidObj = req.user.uid; 
+    const uidObj = req.user.uid;
     const files = await FileModel.find({
       swarm: swarmId,
       $or: [{ sharedIds: uidObj }, { sharedIds: String(req.user.uid) }],
@@ -726,7 +788,9 @@ export async function shareFile(req, res) {
       .lean();
 
     const ownerIdStr = String(file.ownerId);
-    const filteredMatches = matchedUsers.filter((u) => String(u._id) !== ownerIdStr);
+    const filteredMatches = matchedUsers.filter(
+      (u) => String(u._id) !== ownerIdStr
+    );
 
     const matchedEmails = new Set(
       filteredMatches.map((u) => (u.email || "").toLowerCase())

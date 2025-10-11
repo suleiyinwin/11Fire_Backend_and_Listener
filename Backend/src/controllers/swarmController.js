@@ -10,6 +10,12 @@ import {
   deleteAllFilesForOwnerInSwarm,
   migrateAllFilesFromProviderInSwarm,
 } from "../helpers/migrationHelper.js";
+import {
+  emitSwarmCreated,
+  emitSwarmJoined,
+  emitSwarmLeft,
+  emitUserRoleSet,
+} from "../utils/eventSystem.js";
 
 function generateSwarmKeyV1() {
   const hex = crypto.randomBytes(32).toString("hex");
@@ -98,6 +104,16 @@ const createSwarm = async (req, res) => {
     // const socket = bootstrapController.getSocket(bootstrap.peerId);
     // if (socket?.readyState === 1) socket.send(`swarmkey|${key}`);
 
+    // Emit swarm created event
+    emitSwarmCreated({
+      swarmId: swarm._id,
+      name: swarm.name,
+      creator: {
+        userId: req.user.uid,
+        username: user.username,
+      },
+    });
+
     res.json({
       message: "Group created",
       swarmId: swarm._id,
@@ -151,6 +167,19 @@ const joinSwarm = async (req, res) => {
     // Put it in activeSwarm
     await setActiveSwarmBackend(req.user.uid, swarm._id);
 
+    // Emit swarm joined event
+    emitSwarmJoined(
+      {
+        userId: req.user.uid,
+        username: user.username,
+        role: role,
+      },
+      {
+        swarmId: swarm._id,
+        name: swarm.name,
+      }
+    );
+
     res.json({
       ok: true,
       message: "Joined group successfully",
@@ -179,6 +208,14 @@ const setRole = async (req, res) => {
 
     user.role = role;
     await user.save();
+
+    emitUserRoleSet(
+      {
+        userId: user._id,
+        username: user.username,
+      },
+      role
+    );
 
     res.json({ message: "Role set successfully" });
   } catch (err) {
@@ -274,6 +311,8 @@ const leaveSwarm = async (req, res) => {
     if (!swarmId)
       return res.status(400).json({ error: "No swarm specified/active" });
 
+    const swarm = await Swarm.findById(swarmId);
+
     // Determine the caller's role inside that swarm
     const mem = (me.memberships || []).find(
       (m) => String(m.swarm) === String(swarmId)
@@ -322,7 +361,7 @@ const leaveSwarm = async (req, res) => {
       if (filesLeft > 0) {
         await FileModel.deleteMany({ swarm: swarmId });
       }
-      
+
       // Mark swarm's bootstrap as unused and clear its swarm field
       const swarmDoc = await Swarm.findById(swarmId).select("bootstrapId");
       if (swarmDoc?.bootstrapId) {
@@ -340,6 +379,20 @@ const leaveSwarm = async (req, res) => {
       await Swarm.deleteOne({ _id: swarmId });
       swarmDeleted = true;
     }
+
+    // Emit swarm left event
+    emitSwarmLeft(
+      {
+        userId: userId,
+        username: me.username,
+        role: role,
+      },
+      {
+        swarmId: swarmId,
+        name: swarm?.name || null,
+        deleted: swarmDeleted,
+      }
+    );
 
     return res.json({
       ok: true,
