@@ -50,7 +50,7 @@ function handleMessage(ws, str) {
 export async function registerPeer(ws, peerId) {
   // Find which Auth has this peerId (claimed previously)
   const user = await Auth.findOne({ peerId })
-    .select("_id memberships activeSwarm")
+    .select("_id username memberships activeSwarm")
     .lean();
   if (!user) throw new Error("Unknown peerId (not claimed by any user)");
 
