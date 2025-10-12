@@ -305,6 +305,7 @@ const leaveSwarm = async (req, res) => {
 
     // Resolve target swarm
     const me = await Auth.findById(userId).select("memberships activeSwarm");
+    const user = await Auth.findById(req.user.uid);
     if (!me) return res.status(401).json({ error: "Unauthorized" });
 
     const swarmId = req.body?.swarmId || me.activeSwarm;
@@ -384,7 +385,7 @@ const leaveSwarm = async (req, res) => {
     emitSwarmLeft(
       {
         userId: userId,
-        username: me.username,
+        username: user.username,
         role: role,
       },
       {
