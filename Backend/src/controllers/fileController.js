@@ -14,7 +14,13 @@ import { getOrCreateSwarmDataKey, getSwarmDataKey } from "../utils/datakey.js";
 import { encryptEnvelopeGCM, decryptEnvelopeGCM } from "../utils/crypto.js";
 import JSZip from "jszip";
 import bootstrapController from "./bootstrapController.js";
-import { emitProviderToPin, emitFileUploaded, emitFileDownloaded, emitProviderToUnpin, emitFileDeleted } from "../utils/eventSystem.js";
+import {
+  emitProviderToPin,
+  emitFileUploaded,
+  emitFileDownloaded,
+  emitProviderToUnpin,
+  emitFileDeleted,
+} from "../utils/eventSystem.js";
 
 /** Sum of bytes a provider stores within one swarm (based on FileModel) */
 async function usedBytesInSwarm(providerUserId, swarmId) {
@@ -265,6 +271,64 @@ export async function uploadAndReplicate(req, res) {
   }
 }
 
+// Folder upload
+export async function uploadFolder(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+
+    if (!req.file) return res.status(400).json({ error: "Missing folder" });
+
+    const user = await Auth.findById(req.user.uid);
+    if (!user?.activeSwarm)
+      return res.status(400).json({ error: "Set an active swarm first" });
+
+    const swarm = await Swarm.findById(user.activeSwarm).lean();
+    if (!swarm)
+      return res.status(404).json({ error: "Active swarm not found" });
+
+    // Extract folder name from the uploaded file
+    // The folder will come as a ZIP or compressed file
+    const originalName = req.file.originalname || "folder_upload";
+    const folderName = originalName.replace(/\.(zip|tar|gz|rar)$/i, ""); 
+
+    const fileBuffer = req.file.buffer;
+    const maxFolderSize = 500 * 1024 * 1024; // 500MB limit
+
+    if (fileBuffer.length > maxFolderSize) {
+      return res.status(400).json({ error: "Folder too large (max 500MB)" });
+    }
+
+    // If it's not already a ZIP, assume it needs to be processed as a ZIP
+    let zipBuffer;
+    if (originalName.toLowerCase().endsWith(".zip")) {
+      // Already a ZIP file
+      zipBuffer = fileBuffer;
+    } else {
+      // Create a ZIP containing the folder content
+      // This handles cases where the folder comes as a single file representation
+      const zip = new JSZip();
+      zip.file(originalName, fileBuffer);
+      zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+    }
+    // Create fake request to mimic file upload
+    const fakeReq = {
+      ...req,
+      file: {
+        originalname: `${folderName}.zip`,
+        buffer: zipBuffer,
+        mimetype: "application/zip",
+        size: zipBuffer.length,
+      },
+    };
+
+    // Call existing upload function
+    return uploadAndReplicate(fakeReq, res);
+  } catch (err) {
+    console.error("uploadFolder failed:", err);
+    return res.status(500).json({ error: "Folder upload failed" });
+  }
+}
+
 // helper: check if a user (by id) can access a file document
 function isUserAuthorizedForFile(userId, fileDoc) {
   if (!userId || !fileDoc) return false;
@@ -346,6 +410,7 @@ export async function downloadFile(req, res) {
 export async function deleteFile(req, res) {
   try {
     if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    const user = await Auth.findById(req.user.uid);
     const { cid } = req.params;
     if (!cid) return res.status(400).json({ error: "Missing cid" });
 
@@ -386,7 +451,7 @@ export async function deleteFile(req, res) {
     // Remove metadata
     await FileModel.deleteOne({ _id: fileDoc._id });
 
-     // Emit file deleted event
+    // Emit file deleted event
     emitFileDeleted(
       {
         cid: cid,
@@ -401,7 +466,6 @@ export async function deleteFile(req, res) {
         swarmId: swarmId,
       }
     );
-
 
     return res.json({ ok: true, cid });
   } catch (err) {
