@@ -9,11 +9,7 @@ import { emitWsConnection, emitWsDisconnection } from '../utils/eventSystem.js';
 
 export default function wsRouter(wss) {
   wss.on("connection", (ws, req) => {
-    emitWsConnection({
-      type: "provider",
-      remoteAddress: req.socket.remoteAddress,
-      userAgent: req.headers["user-agent"],
-    });
+    // Don't emit connection event immediately - wait for identification
     let identified = false;
     let currentUserId = null;
     let currentPeerId = null;
@@ -28,6 +24,16 @@ export default function wsRouter(wss) {
         try {
           const { userId } = await registerPeer(ws, currentPeerId);
           currentUserId = userId;
+          
+          // Only emit WebSocket connection event after successful registration
+          emitWsConnection({
+            type: "provider",
+            remoteAddress: req.socket.remoteAddress,
+            userAgent: req.headers["user-agent"],
+            peerId: currentPeerId,
+            userId: userId
+          });
+          
           console.log(userId);
           console.log(
             `[providers-ws] Registered peer ${currentPeerId} for user ${userId}`
