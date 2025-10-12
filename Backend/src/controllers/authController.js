@@ -12,14 +12,20 @@ const BASE_SCOPES = ["openid", "profile", "email"];
 export async function initSession(req, res) {
   try {
     // Set a temporary cookie to establish the domain relationship
-    res.cookie('safari_init', 'true', {
+    const cookieOptions = {
       httpOnly: true,
       secure: true,
       sameSite: 'none',
       path: '/',
       maxAge: 60000, // 1 minute
-      domain: process.env.COOKIE_DOMAIN || undefined,
-    });
+    };
+    
+    // Only add domain if it's a valid non-empty string
+    if (process.env.COOKIE_DOMAIN && process.env.COOKIE_DOMAIN.trim()) {
+      cookieOptions.domain = process.env.COOKIE_DOMAIN.trim();
+    }
+    
+    res.cookie('safari_init', 'true', cookieOptions);
     
     res.json({ 
       message: 'Session initialized', 
