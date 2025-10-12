@@ -19,7 +19,19 @@ export function issueSession(res, payload) {
     cookieOptions.domain = process.env.COOKIE_DOMAIN.trim();
   }
   
+  console.log("=== Setting Session Cookie ===");
+  console.log("Cookie options:", cookieOptions);
+  console.log("Token length:", token.length);
+  console.log("Payload:", { uid: payload.uid, activeSwarm: payload.activeSwarm });
+  
+  // Set the primary cookie
   res.cookie(COOKIE_NAME, token, cookieOptions);
+  
+  // Also try setting with different SameSite for mobile compatibility
+  res.cookie(`${COOKIE_NAME}_alt`, token, {
+    ...cookieOptions,
+    sameSite: 'lax', // Alternative for mobile browsers
+  });
 }
 
 export function updateSession(res, prevPayload, patch) {

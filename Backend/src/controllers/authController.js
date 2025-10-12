@@ -38,6 +38,33 @@ export async function initSession(req, res) {
   }
 }
 
+// Cookie test endpoint
+export async function testCookies(req, res) {
+  try {
+    // Set a test cookie
+    res.cookie('test_cookie', 'test_value', {
+      httpOnly: false, // Make it readable by JS for testing
+      secure: true,
+      sameSite: 'none',
+      path: '/',
+      maxAge: 60000, // 1 minute
+    });
+    
+    res.json({
+      message: 'Test cookie set',
+      receivedCookies: req.cookies,
+      headers: {
+        userAgent: req.get('user-agent'),
+        origin: req.get('origin'),
+        referer: req.get('referer'),
+        host: req.get('host'),
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Cookie test failed' });
+  }
+}
+
 export async function startLogin(_req, res, next) {
   try {
     const url = await msalClient.getAuthCodeUrl({
