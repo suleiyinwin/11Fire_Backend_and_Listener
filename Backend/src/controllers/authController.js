@@ -65,12 +65,26 @@ export async function testCookies(req, res) {
   }
 }
 
-export async function startLogin(_req, res, next) {
+export async function startLogin(req, res, next) {
   try {
+    // Generate state for CSRF protection (required for Safari/Mobile)
+    const state = Math.random().toString(36).substring(2, 15);
+    
     const url = await msalClient.getAuthCodeUrl({
       scopes: BASE_SCOPES,
       redirectUri: process.env.AZURE_REDIRECT_URI,
+      state: state, // Critical for Safari/Mobile browsers
+      prompt: 'select_account', // Better UX for multi-account scenarios
     });
+    
+    // Store state in session for validation (optional but recommended)
+    res.cookie('oauth_state', state, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax', // Lax is okay for CSRF tokens
+      maxAge: 10 * 60 * 1000, // 10 minutes
+    });
+    
     res.redirect(url);
   } catch (err) {
     next(err);
@@ -79,15 +93,25 @@ export async function startLogin(_req, res, next) {
 
 export async function callback(req, res, next) {
   try {
-    const { code } = req.query; //Receives the code from Microsoft.
+    const { code, state } = req.query; //Receives the code from Microsoft.
     if (!code)
       return res.status(400).json({ error: "Missing authorization code" });
+
+    // Validate state parameter (CSRF protection)
+    const storedState = req.cookies?.oauth_state;
+    if (state && storedState && state !== storedState) {
+      return res.status(400).json({ error: "Invalid state parameter" });
+    }
+
+    // Clear the state cookie
+    res.clearCookie('oauth_state');
 
     //exchange code for tokens and user info (idTokenClaims).
     const tokenResp = await msalClient.acquireTokenByCode({
       code,
       scopes: BASE_SCOPES,
       redirectUri: process.env.AZURE_REDIRECT_URI,
+      state: state, // Include state in token exchange
     });
 
     const c = tokenResp.idTokenClaims || {};

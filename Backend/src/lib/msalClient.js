@@ -16,6 +16,12 @@ const msalConfig = {
     clientId: process.env.AZURE_CLIENT_ID,
     authority: 'https://login.microsoftonline.com/organizations',
     clientSecret: process.env.AZURE_CLIENT_SECRET,
+    // Enhanced configuration for Safari/Mobile compatibility
+    knownAuthorities: ['login.microsoftonline.com'],
+  },
+  cache: {
+    // Disable cache for server-side to avoid issues
+    cacheLocation: 'none',
   },
   system: {
     loggerOptions: {
@@ -40,6 +46,13 @@ const msalConfig = {
       piiLoggingEnabled: false,
       logLevel: msalLogLevel,
     },
+    // Network timeout for mobile connections
+    networkTimeout: 30000,
+    // Retry configuration for mobile networks
+    retryConfig: {
+      maxRetries: 3,
+      retryDelay: 1000,
+    }
   },
 };
 
