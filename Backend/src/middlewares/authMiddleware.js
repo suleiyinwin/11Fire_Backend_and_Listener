@@ -6,18 +6,7 @@ export function attachUser(req, _res, next) {
   // Try primary cookie first, then alternative
   let token = req.cookies?.[COOKIE_NAME] || req.cookies?.[`${COOKIE_NAME}_alt`];
   
-  // Debug logging for cookie issues
-  console.log("=== Cookie Debug ===");
-  console.log("User-Agent:", req.get('user-agent')?.substring(0, 100));
-  console.log("All cookies:", req.cookies);
-  console.log("Primary session token exists:", !!req.cookies?.[COOKIE_NAME]);
-  console.log("Alt session token exists:", !!req.cookies?.[`${COOKIE_NAME}_alt`]);
-  console.log("Using token from:", req.cookies?.[COOKIE_NAME] ? 'primary' : 'alternative');
-  console.log("Origin:", req.get('origin'));
-  console.log("Referer:", req.get('referer'));
-  
   if (!token) {
-    console.log("No session token found (tried both primary and alt)");
     return next();
   }
   
@@ -26,12 +15,10 @@ export function attachUser(req, _res, next) {
     
     // Ensure tenant information exists
     if (!decoded.ms?.tid) {
-      console.log("Invalid session - missing tenant info");
       return _res.status(401).json({ error: "Invalid session - missing tenant info" });
     }
     
     req.user = decoded;
-    console.log("User authenticated:", decoded.uid);
   } catch (err) {
     console.error("JWT verification failed:", err);
   }
