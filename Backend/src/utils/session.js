@@ -7,11 +7,12 @@ export function issueSession(res, payload) {
   const token = jwt.sign(payload, process.env.APP_JWT_SECRET, { expiresIn: '12h' });
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    // secure: process.env.NODE_ENV === 'production', //only for HTTPS
-    secure: true, // For development, set to false. Change to true in production.
-    sameSite: 'none',
+    secure: true, // Required for SameSite=None
+    sameSite: 'none', // Required for cross-site requests (Azure + Vercel)
     path: '/',
     maxAge: 12 * 60 * 60 * 1000,
+    // Additional Safari compatibility
+    domain: process.env.COOKIE_DOMAIN || undefined,
   });
 }
 
@@ -23,9 +24,10 @@ export function updateSession(res, prevPayload, patch) {
 export function clearSession(res) {
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
-    // secure: process.env.NODE_ENV === 'production', //only for HTTPS
-    secure: true, // For development, set to false. Change to true in production.
-    sameSite: 'none',
+    secure: true, // Required for SameSite=None
+    sameSite: 'none', // Required for cross-site requests (Azure + Vercel)
     path: '/',
+    // Additional Safari compatibility
+    domain: process.env.COOKIE_DOMAIN || undefined, // Optional: set explicit domain
   });
 }
