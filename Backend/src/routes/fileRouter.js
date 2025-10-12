@@ -40,11 +40,11 @@ router.post(
   uploadAndReplicate
 );
 
-// Folder upload endpoint - same pattern as file upload
+// Folder upload 
 router.post(
   "/folder/upload",
   requireAuth,
-  upload.single('file'), 
+  upload.array('files', 1000),
   uploadFolder
 );
 
