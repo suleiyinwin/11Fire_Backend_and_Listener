@@ -6,11 +6,12 @@ import {
   downloadFile,
   deleteFile,
   downloadMultipleFiles,
-  deleteMultipleFiles, 
+  deleteMultipleFiles,
   listMyFilesInActiveSwarm,
   renameFile,
   shareFile,
-  listFilesSharedWithMe
+  listFilesSharedWithMe,
+  uploadFolder,
 } from "../controllers/fileController.js";
 
 const upload = multer({
@@ -39,6 +40,14 @@ router.post(
   uploadAndReplicate
 );
 
+// Folder upload endpoint - same pattern as file upload
+router.post(
+  "/folder/upload",
+  requireAuth,
+  upload.single('file'), 
+  uploadFolder
+);
+
 // download by CID
 router.get("/download/:cid", requireAuth, downloadFile);
 router.post("/download-multiple", requireAuth, downloadMultipleFiles);
@@ -58,6 +67,5 @@ router.post("/share/:cid", requireAuth, shareFile);
 
 // list files shared with current user in active swarm
 router.get("/shared", requireAuth, listFilesSharedWithMe);
-
 
 export default router;
