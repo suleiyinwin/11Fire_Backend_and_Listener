@@ -276,7 +276,9 @@ export async function uploadFolder(req, res) {
   try {
     if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
 
-    if (!req.file) return res.status(400).json({ error: "Missing folder" });
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: "No files provided" });
+    }
 
     const user = await Auth.findById(req.user.uid);
     if (!user?.activeSwarm)
@@ -286,43 +288,58 @@ export async function uploadFolder(req, res) {
     if (!swarm)
       return res.status(404).json({ error: "Active swarm not found" });
 
-    // Extract folder name from the uploaded file
-    // The folder will come as a ZIP or compressed file
-    const originalName = req.file.originalname || "folder_upload";
-    const folderName = originalName.replace(/\.(zip|tar|gz|rar)$/i, ""); 
+    // Get folder name from request body or extract from first file path
+    const { folderName } = req.body;
+    let finalFolderName = folderName;
+    
+    // If no folderName provided, extract from first file's path
+    if (!finalFolderName && req.files.length > 0) {
+      const firstFile = req.files[0];
+      if (firstFile.originalname.includes('/')) {
+        // Extract root folder from path like "MyFolder/subfolder/file.txt"
+        finalFolderName = firstFile.originalname.split('/')[0];
+      } else {
+        finalFolderName = `folder_${Date.now()}`;
+      }
+    }
 
-    const fileBuffer = req.file.buffer;
+    if (req.files.length > 1000) {
+      return res.status(400).json({ error: "Too many files in folder (max 1000)" });
+    }
+
+    // Create ZIP from multiple files in backend
+    const zip = new JSZip();
+    let totalSize = 0;
     const maxFolderSize = 500 * 1024 * 1024; // 500MB limit
 
-    if (fileBuffer.length > maxFolderSize) {
-      return res.status(400).json({ error: "Folder too large (max 500MB)" });
+    for (const file of req.files) {
+      totalSize += file.size;
+
+      if (totalSize > maxFolderSize) {
+        return res.status(400).json({ error: "Folder too large (max 500MB)" });
+      }
+
+      // Use original filename which preserves folder structure
+      const filePath = file.originalname;
+      zip.file(filePath, file.buffer);
     }
 
-    // If it's not already a ZIP, assume it needs to be processed as a ZIP
-    let zipBuffer;
-    if (originalName.toLowerCase().endsWith(".zip")) {
-      // Already a ZIP file
-      zipBuffer = fileBuffer;
-    } else {
-      // Create a ZIP containing the folder content
-      // This handles cases where the folder comes as a single file representation
-      const zip = new JSZip();
-      zip.file(originalName, fileBuffer);
-      zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
-    }
-    // Create fake request to mimic file upload
+    const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+
+    // Create fake request to use existing upload infrastructure
     const fakeReq = {
       ...req,
       file: {
-        originalname: `${folderName}.zip`,
+        originalname: `${finalFolderName}.zip`,
         buffer: zipBuffer,
         mimetype: "application/zip",
         size: zipBuffer.length,
       },
     };
 
-    // Call existing upload function
+    // Use existing upload flow - encryption, replication, events, etc.
     return uploadAndReplicate(fakeReq, res);
+
   } catch (err) {
     console.error("uploadFolder failed:", err);
     return res.status(500).json({ error: "Folder upload failed" });
