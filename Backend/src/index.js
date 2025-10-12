@@ -52,9 +52,32 @@ const corsOptions = {
     }
   },
   credentials: true,
+  
+  // Safari-specific headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie'],
+  preflightContinue: false,
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
+
+// Safari-specific middleware for cookie handling
+app.use((req, res, next) => {
+  // Handle Safari's strict cookie requirements
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Vary', 'Origin');
+  }
+  
+  // Set security headers for Safari compatibility
+  res.header('X-Content-Type-Options', 'nosniff');
+  res.header('X-Frame-Options', 'DENY');
+  res.header('X-XSS-Protection', '1; mode=block');
+  
+  next();
+});
 
 app.get("/health", (req, res) => {
   res.status(200).json({

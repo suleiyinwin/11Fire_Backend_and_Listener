@@ -1,9 +1,10 @@
 import express from 'express';
-import { startLogin, callback, upsertMembership, setActiveSwarm, me, logout, mintProviderClaimToken, setActiveSwarmQuota } from '../controllers/authController.js';
+import { initSession, startLogin, callback, upsertMembership, setActiveSwarm, me, logout, mintProviderClaimToken, setActiveSwarmQuota } from '../controllers/authController.js';
 import { attachUser, requireAuth } from '../middlewares/authMiddleware.js';
 import { requireMembership } from '../middlewares/authMiddleware.js';
 const router = express.Router();
 
+router.post('/init-session', initSession); // Safari cookie initialization
 router.get('/login', startLogin);
 router.get('/callback', callback);
 

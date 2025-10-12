@@ -8,6 +8,30 @@ import { bytesToGb } from "../utils/units.js";
 
 const BASE_SCOPES = ["openid", "profile", "email"];
 
+// Safari cookie initialization endpoint
+export async function initSession(req, res) {
+  try {
+    // Set a temporary cookie to establish the domain relationship
+    res.cookie('safari_init', 'true', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      path: '/',
+      maxAge: 60000, // 1 minute
+      domain: process.env.COOKIE_DOMAIN || undefined,
+    });
+    
+    res.json({ 
+      message: 'Session initialized', 
+      domain: req.get('host'),
+      origin: req.get('origin'),
+      userAgent: req.get('user-agent')?.includes('Safari') ? 'Safari detected' : 'Other browser'
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Session initialization failed' });
+  }
+}
+
 export async function startLogin(_req, res, next) {
   try {
     const url = await msalClient.getAuthCodeUrl({
