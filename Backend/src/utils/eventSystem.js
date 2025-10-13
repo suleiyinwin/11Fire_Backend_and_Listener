@@ -337,9 +337,10 @@ export async function calculateAndEmitStorageMetrics(swarmId, reason) {
 
     // Calculate total provided storage
     const totalQuotaBytes = providers.reduce((total, provider) => {
-      const membership = provider.memberships.find(m => m.swarmId === swarmId);
+      const membership = provider.memberships.find(m => m.swarm === swarmId);
       return total + (membership?.storageQuota || 0);
     }, 0);
+    
 
     // Calculate used storage for this swarm
     const usedStorageResult = await FileModel.aggregate([
