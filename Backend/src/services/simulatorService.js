@@ -404,6 +404,19 @@ class SimulatorService extends EventEmitter {
     });
   }
 
+  // Storage metrics event
+  broadcastStorageEvent(eventData) {
+    const activity = {
+      category: "storage",
+      type: eventData.type,
+      data: eventData.data,
+      timestamp: Date.now(),
+    };
+
+    this.addToHistory(activity);
+    this.broadcast(activity);
+  }
+
   /**
    * Get service statistics
    */
