@@ -1,4 +1,5 @@
 import { EventEmitter } from "events";
+import mongoose from "mongoose";
 import Auth from "../models/Auth.js";
 import FileModel from "../models/FileModel.js";
 import Swarm from "../models/Swarm.js";
@@ -320,30 +321,33 @@ export function emitStorageMetricsUpdated(swarmId, swarmName, reason, totals) {
 export async function calculateAndEmitStorageMetrics(swarmId, reason) {
   try {
     // Get swarm info
-    const swarm = await Swarm.findOne({ _id: swarmId });
-    if (!swarm) return;
+    const swarm = await Swarm.findById(swarmId);
+    if (!swarm) {
+      console.log(`[DEBUG] Swarm not found for ID: ${swarmId}`);
+      return;
+    }
     // Get all providers in the swarm with their storage quotas
     const providers = await Auth.find({
-      "memberships.swarmId": swarmId,
+      "memberships.swarm": swarmId,
       "memberships.role": "provider",
-      "memberships.storageQuota": { $exists: true, $gt: 0 }
+      "memberships.quotaBytes": { $exists: true, $gt: 0 }
     }).select("username memberships.$");
 
     // Get all members count
     const allMembers = await Auth.countDocuments({
-      "memberships.swarmId": swarmId
+      "memberships.swarm": swarmId
     });
 
     // Calculate total provided storage
     const totalQuotaBytes = providers.reduce((total, provider) => {
-      const membership = provider.memberships.find(m => m.swarm === swarmId);
-      return total + (membership?.storageQuota || 0);
+      const membership = provider.memberships.find(m => m.swarm.toString() === swarmId.toString());
+      return total + (membership?.quotaBytes || 0);
     }, 0);
     
 
     // Calculate used storage for this swarm
     const usedStorageResult = await FileModel.aggregate([
-      { $match: { swarmId } },
+      { $match: { swarm: new mongoose.Types.ObjectId(swarmId) } },
       { $group: { _id: null, totalSize: { $sum: "$size" } } }
     ]);
 
@@ -367,7 +371,6 @@ export async function calculateAndEmitStorageMetrics(swarmId, reason) {
     };
 
     emitStorageMetricsUpdated(swarmId, swarm.name, reason, totals);
-    console.log(`[Storage Metrics] Emitting metrics: ${JSON.stringify(totals)}`);
 
   } catch (error) {
     console.error(`Error calculating storage metrics for swarm ${swarmId}:`, error);
