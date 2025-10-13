@@ -21,6 +21,7 @@ import {
   emitProviderToUnpin,
   emitFileDeleted,
 } from "../utils/eventSystem.js";
+import { calculateAndEmitStorageMetrics } from "../utils/eventSystem.js";
 
 /** Sum of bytes a provider stores within one swarm (based on FileModel) */
 async function usedBytesInSwarm(providerUserId, swarmId) {
@@ -257,6 +258,8 @@ export async function uploadAndReplicate(req, res) {
       }
     );
 
+    await calculateAndEmitStorageMetrics(user.activeSwarm, "file_uploaded");
+
     return res.json({
       ok: true,
       cid,
@@ -483,6 +486,8 @@ export async function deleteFile(req, res) {
         swarmId: swarmId,
       }
     );
+
+    await calculateAndEmitStorageMetrics(swarmId, "file_deleted");
 
     return res.json({ ok: true, cid });
   } catch (err) {

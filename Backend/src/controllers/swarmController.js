@@ -16,6 +16,8 @@ import {
   emitSwarmLeft,
   emitUserRoleSet,
 } from "../utils/eventSystem.js";
+import { calculateAndEmitStorageMetrics } from "../utils/eventSystem.js";
+
 
 function generateSwarmKeyV1() {
   const hex = crypto.randomBytes(32).toString("hex");
@@ -114,6 +116,8 @@ const createSwarm = async (req, res) => {
       },
     });
 
+    await calculateAndEmitStorageMetrics(swarm._id, "swarm_created");
+
     res.json({
       message: "Group created",
       swarmId: swarm._id,
@@ -179,6 +183,8 @@ const joinSwarm = async (req, res) => {
         name: swarm.name,
       }
     );
+
+    await calculateAndEmitStorageMetrics(swarm._id, "member_joined");
 
     res.json({
       ok: true,

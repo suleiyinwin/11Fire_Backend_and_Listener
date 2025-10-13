@@ -133,6 +133,12 @@ class EventHandlerService {
       EVENT_TYPES.WS_DISCONNECTION,
       this.handleWsDisconnection.bind(this)
     );
+
+    // Storage Metrics Event
+    this.addListener(
+      EVENT_TYPES.STORAGE_METRICS_UPDATED,
+      this.handleStorageMetricsUpdated.bind(this)
+    );
   }
 
   /**
@@ -348,6 +354,15 @@ class EventHandlerService {
       `WebSocket client disconnected: ${data.reason || "unknown reason"}`,
       data
     );
+  }
+
+  // New handler for storage metrics updates
+  handleStorageMetricsUpdated(metricsData) {
+    console.log("[EventHandler] Storage metrics updated:", metricsData);
+    simulatorService.broadcastStorageEvent({
+      type: "storage_metrics_updated",
+      data: metricsData,
+    });
   }
 
   /**

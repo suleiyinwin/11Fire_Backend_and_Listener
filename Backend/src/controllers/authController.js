@@ -6,6 +6,8 @@ import { generateProviderClaimForUser } from "../utils/providerClaim.js";
 import { setQuotaForActiveSwarm } from "../utils/membershipUtils.js";
 import { bytesToGb } from "../utils/units.js";
 import { ResponseMode } from '@azure/msal-node';
+import { calculateAndEmitStorageMetrics } from "../utils/eventSystem.js";
+
 
 const BASE_SCOPES = ["openid", "profile", "email"];
 
@@ -291,6 +293,8 @@ export async function setActiveSwarmQuota(req, res, next) {
 
     const SwarmModel = (await import("../models/Swarm.js")).default;
     const swarm = await SwarmModel.findById(user.activeSwarm).select("name").lean();
+
+    await calculateAndEmitStorageMetrics(user.activeSwarm, "quota_set");
 
     return res.json({
       ok: true,
