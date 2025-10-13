@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
-import { Auth } from "../models/Auth.js";
-import { FileModel } from "../models/FileModel.js";
-import { Swarm } from "../models/Swarm.js";
+import Auth from "../models/Auth.js";
+import FileModel from "../models/FileModel.js";
+import Swarm from "../models/Swarm.js";
 /**
  * Backend Event System for 11Fire
  * Centralized event emission and handling for all backend activities
