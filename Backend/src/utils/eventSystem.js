@@ -1,4 +1,7 @@
 import { EventEmitter } from "events";
+import { Auth } from "../models/Auth.js";
+import { FileModel } from "../models/FileModel.js";
+import { Swarm } from "../models/Swarm.js";
 /**
  * Backend Event System for 11Fire
  * Centralized event emission and handling for all backend activities
@@ -55,6 +58,9 @@ export const EVENT_TYPES = {
   SYSTEM_STARTUP: "system:startup",
   // SYSTEM_SHUTDOWN: "system:shutdown",
   // SYSTEM_ERROR: "system:error",
+
+  // Storage Metrics Event
+  STORAGE_METRICS_UPDATED: "storage:metrics_updated",
 };
 
 /**
@@ -288,5 +294,84 @@ export function emitSystemStartup() {
 //     timestamp: Date.now(),
 //   });
 // }
+
+// Storage Metrics Event
+export function emitStorageMetricsUpdated(swarmId, swarmName, reason, totals) {
+  backendEvents.emit(EVENT_TYPES.STORAGE_METRICS_UPDATED, {
+    swarmId,
+    swarmName,
+    reason, // "swarm_created", "member_joined", "quota_set", "file_uploaded", "file_deleted"
+    totals: {
+      quotaBytes: totals.quotaBytes,
+      quotaGB: totals.quotaGB,
+      usedBytes: totals.usedBytes,
+      usedGB: totals.usedGB,
+      percentUsed: totals.percentUsed,
+      availableBytes: totals.availableBytes,
+      availableGB: totals.availableGB,
+      providerCount: totals.providerCount,
+      memberCount: totals.memberCount
+    },
+    timestamp: Date.now(),
+  });
+}
+
+// Storage calculation helper
+export async function calculateAndEmitStorageMetrics(swarmId, reason) {
+  try {
+    // Get swarm info
+    const swarm = await Swarm.findOne({ swarmId });
+    if (!swarm) return;
+
+    // Get all providers in the swarm with their storage quotas
+    const providers = await Auth.find({
+      "memberships.swarmId": swarmId,
+      "memberships.role": "provider",
+      "memberships.storageQuota": { $exists: true, $gt: 0 }
+    }).select("username memberships.$");
+
+    // Get all members count
+    const allMembers = await Auth.countDocuments({
+      "memberships.swarmId": swarmId
+    });
+
+    // Calculate total provided storage
+    const totalQuotaBytes = providers.reduce((total, provider) => {
+      const membership = provider.memberships.find(m => m.swarmId === swarmId);
+      return total + (membership?.storageQuota || 0);
+    }, 0);
+
+    // Calculate used storage for this swarm
+    const usedStorageResult = await FileModel.aggregate([
+      { $match: { swarmId } },
+      { $group: { _id: null, totalSize: { $sum: "$size" } } }
+    ]);
+
+    const usedBytes = usedStorageResult.length > 0 ? usedStorageResult[0].totalSize : 0;
+    const quotaGB = Math.round((totalQuotaBytes / (1024 ** 3)) * 100) / 100;
+    const usedGB = Math.round((usedBytes / (1024 ** 3)) * 100) / 100;
+    const percentUsed = totalQuotaBytes > 0 ? Math.round((usedBytes / totalQuotaBytes) * 10000) / 100 : 0;
+    const availableBytes = totalQuotaBytes - usedBytes;
+    const availableGB = Math.round((availableBytes / (1024 ** 3)) * 100) / 100;
+
+    const totals = {
+      quotaBytes: totalQuotaBytes,
+      quotaGB,
+      usedBytes,
+      usedGB,
+      percentUsed,
+      availableBytes,
+      availableGB,
+      providerCount: providers.length,
+      memberCount: allMembers
+    };
+
+    emitStorageMetricsUpdated(swarmId, swarm.name, reason, totals);
+
+  } catch (error) {
+    console.error(`Error calculating storage metrics for swarm ${swarmId}:`, error);
+  }
+}
+
 
 export default backendEvents;
