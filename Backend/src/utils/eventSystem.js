@@ -320,9 +320,8 @@ export function emitStorageMetricsUpdated(swarmId, swarmName, reason, totals) {
 export async function calculateAndEmitStorageMetrics(swarmId, reason) {
   try {
     // Get swarm info
-    const swarm = await Swarm.findOne({ swarmId });
+    const swarm = await Swarm.findOne({ _id: swarmId });
     if (!swarm) return;
-
     // Get all providers in the swarm with their storage quotas
     const providers = await Auth.find({
       "memberships.swarmId": swarmId,
@@ -368,6 +367,7 @@ export async function calculateAndEmitStorageMetrics(swarmId, reason) {
     };
 
     emitStorageMetricsUpdated(swarmId, swarm.name, reason, totals);
+    console.log(`[Storage Metrics] Emitting metrics: ${JSON.stringify(totals)}`);
 
   } catch (error) {
     console.error(`Error calculating storage metrics for swarm ${swarmId}:`, error);
