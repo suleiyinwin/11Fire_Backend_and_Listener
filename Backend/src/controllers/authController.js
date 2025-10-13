@@ -5,6 +5,7 @@ import { upsertMembershipForUser } from "../utils/membershipUtils.js";
 import { generateProviderClaimForUser } from "../utils/providerClaim.js";
 import { setQuotaForActiveSwarm } from "../utils/membershipUtils.js";
 import { bytesToGb } from "../utils/units.js";
+import { ResponseMode } from '@azure/msal-node';
 
 const BASE_SCOPES = ["openid", "profile", "email"];
 
@@ -75,6 +76,7 @@ export async function startLogin(req, res, next) {
       redirectUri: process.env.AZURE_REDIRECT_URI,
       state: state, // Critical for Safari/Mobile browsers
       prompt: 'select_account', // Better UX for multi-account scenarios
+      responseMode: ResponseMode.QUERY,
     });
     
     // Store state in session for validation (optional but recommended)
