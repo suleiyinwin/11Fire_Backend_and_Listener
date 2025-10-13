@@ -83,7 +83,7 @@ export async function startLogin(req, res, next) {
     res.cookie('oauth_state', state, {
       httpOnly: true,
       secure: true,
-      sameSite: 'lax', // Lax is okay for CSRF tokens
+      sameSite: 'none',
       maxAge: 10 * 60 * 1000, // 10 minutes
     });
     
