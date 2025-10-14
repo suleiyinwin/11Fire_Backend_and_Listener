@@ -139,7 +139,7 @@ export async function measureRtt(ws, peerId) {
 }
 
 // Ask provider to pin a CID, resolves true/false
-export async function pinCid(ws, cid, timeoutMs = 5 * 60 * 1000) {
+export async function pinCid(ws, cid, timeoutMs = 4 * 60 * 1000) {  // Reduced to 4min to stay under provider 5min timeout
   ws.send(`pin|${cid}`);
   try {
     const res = await _waitFor(
@@ -147,14 +147,16 @@ export async function pinCid(ws, cid, timeoutMs = 5 * 60 * 1000) {
       (str) => str.startsWith("Success:") || str.startsWith("Error:"),
       timeoutMs
     );
+    console.log(`[providerRegistry] Pin response for ${cid}: ${res}`);
     return res.startsWith("Success:");
-  } catch {
+  } catch (err) {
+    console.error(`[providerRegistry] Pin timeout for ${cid}:`, err.message);
     return false;
   }
 }
 
 /** Ask provider to unpin a CID */
-export async function unpinCid(ws, cid, timeoutMs = 120000) {
+export async function unpinCid(ws, cid, timeoutMs = 90000) {  // Reduced to 90s to stay under provider 1min timeout + buffer
   ws.send(`unpin|${cid}`);
   try {
     const res = await _waitFor(
@@ -162,8 +164,10 @@ export async function unpinCid(ws, cid, timeoutMs = 120000) {
       (str) => str.startsWith("Success:") || str.startsWith("Error:"),
       timeoutMs
     );
+    console.log(`[providerRegistry] Unpin response for ${cid}: ${res}`);
     return res.startsWith("Success:");
-  } catch {
+  } catch (err) {
+    console.error(`[providerRegistry] Unpin timeout for ${cid}:`, err.message);
     return false;
   }
 }
