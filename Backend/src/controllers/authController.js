@@ -177,11 +177,20 @@ export async function callback(req, res, next) {
         expiresIn: "12h",
       });
 
-      // Redirect to frontend callback with token in URL fragment (more secure)
+      // Redirect to frontend ConditionalRedirect with token as URL parameter
       const frontendUrl = process.env.POST_LOGIN_REDIRECT || "/";
-      const callbackUrl = frontendUrl.endsWith('/') ? frontendUrl + 'auth/callback' : frontendUrl + '/auth/callback';
+      const redirectUrl = frontendUrl.endsWith('/') ? frontendUrl + 'redirect' : frontendUrl + '/redirect';
       
-      return res.redirect(`${callbackUrl}#token=${token}&success=true`);
+      // Include user data as well for immediate use
+      const userData = encodeURIComponent(JSON.stringify({
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        activeSwarm: user.activeSwarm,
+        memberships: user.memberships,
+      }));
+      
+      return res.redirect(`${redirectUrl}?token=${token}&success=true&user=${userData}`);
     } else {
       // Traditional cookie-based flow
       issueSession(res, payload);
