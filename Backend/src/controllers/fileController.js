@@ -182,7 +182,16 @@ export async function uploadAndReplicate(req, res) {
     const dataKey = await getOrCreateSwarmDataKey(user.activeSwarm);
 
     // encrypt locally; envelope is what we store
-    const envelope = encryptEnvelopeGCM(plain, dataKey);
+    const fileContext = {
+      filename: fileName,
+      fileSize: size,
+      username: user.username,
+      userId: user._id,
+      swarmId: user.activeSwarm,
+      swarmName: swarm.name,
+      description: `Encrypting file '${fileName}'`
+    };
+    const envelope = encryptEnvelopeGCM(plain, dataKey, fileContext);
 
     // get CID for encrypted bytes
     const cid = await uploadViaBootstrap(fileName, envelope);
@@ -391,7 +400,17 @@ export async function downloadFile(req, res) {
     let plain;
     try {
       const dataKey = await getSwarmDataKey(fileDoc.swarm);
-      plain = decryptEnvelopeGCM(buf, dataKey);
+      const swarm = await Swarm.findById(fileDoc.swarm).lean();
+      const fileContext = {
+        filename: fileDoc.name || "unknown",
+        fileSize: buf.length, // encrypted size, plain size will be available after decryption
+        username: user.username,
+        userId: user._id,
+        swarmId: fileDoc.swarm,
+        swarmName: swarm?.name || "unknown",
+        description: `Decrypting file '${fileDoc.name || cid}'`
+      };
+      plain = decryptEnvelopeGCM(buf, dataKey, fileContext);
     } catch (e) {
       console.error("decryptEnvelopeGCM failed:", e);
       return res.status(500).json({ error: "Decryption failed" });
@@ -547,7 +566,17 @@ export async function downloadMultipleFiles(req, res) {
       try {
         const buf = await downloadViaBootstrap(fileDoc.cid);
         const dataKey = await getSwarmDataKey(fileDoc.swarm);
-        const plain = decryptEnvelopeGCM(buf, dataKey);
+        const swarm = await Swarm.findById(fileDoc.swarm).lean();
+        const fileContext = {
+          filename: fileDoc.name || "unknown",
+          fileSize: buf.length, // encrypted size
+          username: user.username,
+          userId: user._id,
+          swarmId: fileDoc.swarm,
+          swarmName: swarm?.name || "unknown",
+          description: `Decrypting file '${fileDoc.name || fileDoc.cid}' for multi-download`
+        };
+        const plain = decryptEnvelopeGCM(buf, dataKey, fileContext);
 
         fileContents.push({
           name: fileDoc.name || fileDoc.cid,

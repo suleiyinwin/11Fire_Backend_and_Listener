@@ -34,6 +34,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -110,52 +111,70 @@ func claimPeerID(token, peerID string) error {
 
 // ---------- WS loop ----------
 func connectWSAndServe(peerID string) {
+	const reconnectDelay = 3 * time.Second
+
 	for {
 		log.Println("[provider] Connecting WS ->", backendWS)
-		conn, _, err := websocket.DefaultDialer.Dial(backendWS, nil)
+
+		// Use proper dialer like bootstrap
+		dialer := websocket.Dialer{
+			Proxy:             http.ProxyFromEnvironment,
+			HandshakeTimeout:  15 * time.Second,
+			EnableCompression: false,
+		}
+
+		conn, resp, err := dialer.Dial(backendWS, nil)
 		if err != nil {
-			log.Println("[provider] WS connect failed; retrying in 3s:", err)
-			time.Sleep(3 * time.Second)
+			if resp != nil {
+				body, _ := io.ReadAll(resp.Body)
+				_ = resp.Body.Close()
+				log.Printf("[provider] Dial failed: %v (status=%d) body=%s", err, resp.StatusCode, string(body))
+			} else {
+				log.Println("[provider] Dial failed:", err)
+			}
+			time.Sleep(reconnectDelay)
 			continue
 		}
-		log.Println("[provider] WS connected")
-		_ = conn.WriteMessage(websocket.TextMessage, []byte("id|"+peerID))
 
-		// Set read deadline for detecting stale connections
-		conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
+		handleProviderConnection(conn, peerID)
+		log.Println("[provider] Reconnecting in", reconnectDelay)
+		time.Sleep(reconnectDelay)
+	}
+}
 
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				log.Println("[provider] WS lost; reconnecting:", err)
-				break
-			}
+func handleProviderConnection(conn *websocket.Conn, peerID string) {
+	defer conn.Close()
 
-			// Reset read deadline on each message
-			conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
-			text := string(msg)
-			switch {
-			case strings.HasPrefix(text, "hb|"):
-				// cheap heartbeat: echo nonce for RTT
-				nonce := strings.TrimPrefix(text, "hb|")
-				if err := conn.WriteMessage(websocket.TextMessage, []byte("hb|"+nonce)); err != nil {
-					log.Println("[provider] Failed to send heartbeat:", err)
-					break
-				}
+	// Register with peer ID
+	_ = conn.WriteMessage(websocket.TextMessage, []byte("id|"+peerID))
+	log.Println("[provider] Connected to backend as", peerID)
 
-			case text == "ping":
-				handlePing(conn)
-
-			case strings.HasPrefix(text, "pin|"):
-				handlePin(conn, strings.TrimPrefix(text, "pin|"))
-
-			case strings.HasPrefix(text, "unpin|"):
-				handleUnpin(conn, strings.TrimPrefix(text, "unpin|"))
-			}
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("[provider] Read error:", err)
+			break
 		}
 
-		_ = conn.Close()
-		time.Sleep(5 * time.Second)
+		text := string(msg)
+		switch {
+		case strings.HasPrefix(text, "hb|"):
+			// cheap heartbeat: echo nonce for RTT
+			nonce := strings.TrimPrefix(text, "hb|")
+			if err := conn.WriteMessage(websocket.TextMessage, []byte("hb|"+nonce)); err != nil {
+				log.Println("[provider] Failed to send heartbeat:", err)
+				return
+			}
+
+		case text == "ping":
+			handlePing(conn)
+
+		case strings.HasPrefix(text, "pin|"):
+			handlePin(conn, strings.TrimPrefix(text, "pin|"))
+
+		case strings.HasPrefix(text, "unpin|"):
+			handleUnpin(conn, strings.TrimPrefix(text, "unpin|"))
+		}
 	}
 }
 
@@ -180,7 +199,15 @@ func handlePing(conn *websocket.Conn) {
 func handlePin(conn *websocket.Conn, cid string) {
 	log.Printf("[provider] Pinning CID: %s", cid)
 
-	// Reduce timeout to 3m to ensure backend doesn't timeout first (backend: 5m)
+	// Quick IPFS health check - if this fails after 5+ minutes, IPFS daemon is likely stuck
+	healthCmd := exec.Command(ipfsBin, "version")
+	if _, err := healthCmd.CombinedOutput(); err != nil {
+		log.Printf("[provider] IPFS daemon health check failed: %v", err)
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("Error: IPFS daemon unresponsive"))
+		return
+	}
+
+	// 3 minute timeout for provider pin operations
 	cmd := exec.Command(ipfsBin, "pin", "add", "--recursive", "--timeout=3m", cid)
 	out, err := cmd.CombinedOutput()
 

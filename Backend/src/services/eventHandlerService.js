@@ -249,11 +249,17 @@ class EventHandlerService {
     console.log("[EventHandler] File encrypted:", data);
     simulatorService.broadcastSystemEvent(
       "File Encrypted",
-      `File "${data.file.name}" encrypted using ${
+      `File "${data.filename}" encrypted by ${data.username} using ${
         data.encryption.algorithm || "AES-256-GCM"
       }`,
       {
-        file: data.file,
+        filename: data.filename,
+        fileSize: data.fileSize,
+        username: data.username,
+        userId: data.userId,
+        swarmId: data.swarmId,
+        swarmName: data.swarmName,
+        description: data.description,
         algorithm: data.encryption.algorithm,
         keyDerivation: data.encryption.keyDerivation || "PBKDF2",
         timestamp: data.timestamp,
@@ -265,9 +271,15 @@ class EventHandlerService {
     console.log("[EventHandler] File decrypted:", data);
     simulatorService.broadcastSystemEvent(
       "File Decrypted",
-      `File "${data.file.name}" successfully decrypted`,
+      `File "${data.filename}" successfully decrypted by ${data.username}`,
       {
-        file: data.file,
+        filename: data.filename,
+        fileSize: data.fileSize,
+        username: data.username,
+        userId: data.userId,
+        swarmId: data.swarmId,
+        swarmName: data.swarmName,
+        description: data.description,
         decryptionTime: data.decryption.decryptionTime,
         timestamp: data.timestamp,
       }
@@ -278,8 +290,18 @@ class EventHandlerService {
     console.log("[EventHandler] File encryption failed:", data);
     simulatorService.broadcastSystemEvent(
       "File Encryption Failed",
-      `Failed to encrypt file "${data.file.name}": ${data.error}`,
-      data
+      `Failed to encrypt file "${data.filename}" by ${data.username}: ${data.error}`,
+      {
+        filename: data.filename,
+        fileSize: data.fileSize,
+        username: data.username,
+        userId: data.userId,
+        swarmId: data.swarmId,
+        swarmName: data.swarmName,
+        description: data.description,
+        error: data.error,
+        timestamp: data.timestamp,
+      }
     );
   }
 
@@ -287,8 +309,18 @@ class EventHandlerService {
     console.log("[EventHandler] File decryption failed:", data);
     simulatorService.broadcastSystemEvent(
       "File Decryption Failed",
-      `Failed to decrypt file "${data.file.name}": ${data.error}`,
-      data
+      `Failed to decrypt file "${data.filename}" by ${data.username}: ${data.error}`,
+      {
+        filename: data.filename,
+        fileSize: data.fileSize,
+        username: data.username,
+        userId: data.userId,
+        swarmId: data.swarmId,
+        swarmName: data.swarmName,
+        description: data.description,
+        error: data.error,
+        timestamp: data.timestamp,
+      }
     );
   }
 
