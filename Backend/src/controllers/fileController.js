@@ -207,7 +207,7 @@ export async function uploadAndReplicate(req, res) {
       const providerIds = chosen
         .map((p) => p.userId || p.peerId)
         .filter(Boolean);
-      emitProviderToPin(cid, providerIds, user.activeSwarm);
+      emitProviderToPin(cid, providerIds, user.activeSwarm, fileName, user.username);
     } catch (e) {
       console.warn("emitProviderToPin error:", e?.message || e);
     }
@@ -447,7 +447,7 @@ export async function deleteFile(req, res) {
     // Unpin from all providers
     const swarmId = fileDoc.swarm;
     //Emit Unpin Provider
-    emitProviderToUnpin(cid, fileDoc.storedIds, swarmId);
+    emitProviderToUnpin(cid, fileDoc.storedIds, swarmId, fileDoc.name, user.username);
     const providers = await getOnlineProvidersForSwarm(swarmId);
     for (const p of providers) {
       try {
@@ -622,6 +622,7 @@ export async function downloadMultipleFiles(req, res) {
 export async function deleteMultipleFiles(req, res) {
   try {
     if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+    const user = await Auth.findById(req.user.uid);
 
     const { cids } = req.body;
     if (!Array.isArray(cids) || cids.length === 0) {
@@ -673,6 +674,10 @@ export async function deleteMultipleFiles(req, res) {
       try {
         // Get providers for this swarm
         const swarmId = fileDoc.swarm;
+        
+        // Emit unpin event
+        emitProviderToUnpin(cid, fileDoc.storedIds, swarmId, fileDoc.name, user.username);
+        
         const providers = await getOnlineProvidersForSwarm(swarmId);
 
         // Unpin from all providers (parallel for speed)

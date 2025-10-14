@@ -148,18 +148,22 @@ export function emitFileDownloaded(fileData, downloaderData) {
   });
 }
 
-export function emitProviderToPin(cid, providerIds = [], swarmId) {
+export function emitProviderToPin(cid, providerIds = [], swarmId, filename, username) {
   backendEvents.emit(EVENT_TYPES.FILE_PIN_PROVIDER, {
     cid,
+    filename,
+    username,
     providerIds: Array.isArray(providerIds) ? providerIds : [providerIds],
     swarmId,
     timestamp: Date.now(),
   });
 }
 
-export function emitProviderToUnpin(cid, providerIds = [], swarmId) {
+export function emitProviderToUnpin(cid, providerIds = [], swarmId, filename, username) {
   backendEvents.emit(EVENT_TYPES.FILE_UNPINNED, {
     cid,
+    filename,
+    username,
     providerIds: Array.isArray(providerIds) ? providerIds : [providerIds],
     swarmId,
     timestamp: Date.now(),
