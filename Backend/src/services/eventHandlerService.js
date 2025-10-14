@@ -231,7 +231,7 @@ class EventHandlerService {
     console.log("[EventHandler] File pinned:", data);
     simulatorService.broadcastSystemEvent(
       "File Pinned",
-      `File ${data.cid} pinned`,
+      `File "${data.filename}" pinned by ${data.username}`,
       data
     );
   }
@@ -240,7 +240,7 @@ class EventHandlerService {
     console.log("[EventHandler] File unpinned:", data);
     simulatorService.broadcastSystemEvent(
       "File Unpinned",
-      `File ${data.cid} unpinned`,
+      `File "${data.filename}" unpinned by ${data.username}`,
       data
     );
   }
