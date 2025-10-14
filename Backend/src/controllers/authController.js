@@ -172,23 +172,16 @@ export async function callback(req, res, next) {
 
     // Use wantsJson (determined from state) for consistency
     if (wantsJson) {
-      // Return token for frontend to handle
+      // Token-based flow: redirect to frontend with token in URL
       const token = jwt.sign(payload, process.env.APP_JWT_SECRET, {
         expiresIn: "12h",
       });
 
-      return res.json({
-        success: true,
-        token: token,
-        user: {
-          id: user._id,
-          username: user.username,
-          email: user.email,
-          activeSwarm: user.activeSwarm,
-          memberships: user.memberships,
-        },
-        redirectUrl: process.env.POST_LOGIN_REDIRECT || "/",
-      });
+      // Redirect to frontend callback with token in URL fragment (more secure)
+      const frontendUrl = process.env.POST_LOGIN_REDIRECT || "/";
+      const callbackUrl = frontendUrl.endsWith('/') ? frontendUrl + 'auth/callback' : frontendUrl + '/auth/callback';
+      
+      return res.redirect(`${callbackUrl}#token=${token}&success=true`);
     } else {
       // Traditional cookie-based flow
       issueSession(res, payload);
