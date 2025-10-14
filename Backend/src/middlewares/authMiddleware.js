@@ -21,16 +21,13 @@ export function attachUser(req, _res, next) {
   try {
     const decoded = jwt.verify(token, process.env.APP_JWT_SECRET);
 
-    // Ensure tenant information exists
-    if (!decoded.ms?.tid) {
-      return _res
-        .status(401)
-        .json({ error: "Invalid session - missing tenant info" });
+    // Ensure tenant information exists - for attachUser, we just skip setting user instead of rejecting
+    if (decoded.ms?.tid) {
+      req.user = decoded;
     }
-
-    req.user = decoded;
   } catch (err) {
     console.error("JWT verification failed:", err);
+    // For attachUser, we don't reject - just continue without setting req.user
   }
   next();
 }
