@@ -86,15 +86,20 @@ export async function startLogin(req, res, next) {
       responseMode: ResponseMode.QUERY,
     });
 
-    // Store state in session for validation (optional but recommended)
-    res.cookie("oauth_state", state, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-      maxAge: 10 * 60 * 1000, // 10 minutes
-    });
-
-    res.redirect(url);
+    // For token-based auth, store state in URL instead of cookies (Safari-friendly)
+    if (wantsJson) {
+      // No cookies needed for token-based flow - state validation via URL
+      res.redirect(url);
+    } else {
+      // Only use cookies for traditional flow
+      res.cookie("oauth_state", state, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax", // Changed from "none" to "lax" for better Safari support
+        maxAge: 10 * 60 * 1000, // 10 minutes
+      });
+      res.redirect(url);
+    }
   } catch (err) {
     next(err);
   }
@@ -109,14 +114,16 @@ export async function callback(req, res, next) {
     const [originalState, format] = (state || '').split('|');
     const wantsJson = format === 'json';
 
-    // Validate state parameter (CSRF protection) - use originalState for comparison
-    const storedState = req.cookies?.oauth_state;
-    if (originalState && storedState && originalState !== storedState) {
-      return res.status(400).json({ error: "Invalid state parameter" });
+    // For token-based auth, we skip cookie-based state validation (Safari-friendly)
+    if (!wantsJson) {
+      // Only validate state via cookies for traditional flow
+      const storedState = req.cookies?.oauth_state;
+      if (originalState && storedState && originalState !== storedState) {
+        return res.status(400).json({ error: "Invalid state parameter" });
+      }
+      // Clear the state cookie for traditional flow
+      res.clearCookie("oauth_state");
     }
-
-    // Clear the state cookie
-    res.clearCookie("oauth_state");
 
     //exchange code for tokens and user info (idTokenClaims).
     const tokenResp = await msalClient.acquireTokenByCode({
@@ -163,12 +170,8 @@ export async function callback(req, res, next) {
     //   console.error("Failed to generate provider claim token:", e);
     // }
 
-    const acceptsJson =
-      req.headers.accept?.includes("application/json") ||
-      req.query.format === "json" ||
-      req.headers["x-requested-with"] === "XMLHttpRequest";
-
-    if (acceptsJson) {
+    // Use wantsJson (determined from state) for consistency
+    if (wantsJson) {
       // Return token for frontend to handle
       const token = jwt.sign(payload, process.env.APP_JWT_SECRET, {
         expiresIn: "12h",
