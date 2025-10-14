@@ -139,7 +139,7 @@ export async function measureRtt(ws, peerId) {
 }
 
 // Ask provider to pin a CID, resolves true/false
-export async function pinCid(ws, cid, timeoutMs = 4 * 60 * 1000) {  // Reduced to 4min to stay under provider 5min timeout
+export async function pinCid(ws, cid, timeoutMs = 4 * 60 * 1000) {  // 4 minutes to accommodate provider 3min timeout
   ws.send(`pin|${cid}`);
   try {
     const res = await _waitFor(
