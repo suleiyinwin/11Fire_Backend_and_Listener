@@ -108,10 +108,10 @@ export async function callback(req, res, next) {
 
     const [originalState, format] = (state || '').split('|');
     const wantsJson = format === 'json';
-    
-    // Validate state parameter (CSRF protection)
+
+    // Validate state parameter (CSRF protection) - use originalState for comparison
     const storedState = req.cookies?.oauth_state;
-    if (state && storedState && state !== storedState) {
+    if (originalState && storedState && originalState !== storedState) {
       return res.status(400).json({ error: "Invalid state parameter" });
     }
 
