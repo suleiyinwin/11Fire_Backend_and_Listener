@@ -179,7 +179,7 @@ export async function callback(req, res, next) {
 
       // Redirect to frontend ConditionalRedirect with token as URL parameter
       const frontendUrl = process.env.POST_LOGIN_REDIRECT || "/";
-      const redirectUrl = frontendUrl.endsWith('/') ? frontendUrl + 'redirect' : frontendUrl + '/redirect';
+      // const redirectUrl = frontendUrl.endsWith('/') ? frontendUrl + 'redirect' : frontendUrl + '/redirect';
       
       // Include user data as well for immediate use
       const userData = encodeURIComponent(JSON.stringify({
@@ -190,7 +190,7 @@ export async function callback(req, res, next) {
         memberships: user.memberships,
       }));
       
-      return res.redirect(`${redirectUrl}?token=${token}&success=true&user=${userData}`);
+      return res.redirect(`${frontendUrl}?token=${token}&success=true&user=${userData}`);
     } else {
       // Traditional cookie-based flow
       issueSession(res, payload);
