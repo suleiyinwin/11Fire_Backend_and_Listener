@@ -34,6 +34,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -110,78 +111,70 @@ func claimPeerID(token, peerID string) error {
 
 // ---------- WS loop ----------
 func connectWSAndServe(peerID string) {
+	const reconnectDelay = 3 * time.Second
+
 	for {
 		log.Println("[provider] Connecting WS ->", backendWS)
-		conn, _, err := websocket.DefaultDialer.Dial(backendWS, nil)
+
+		// Use proper dialer like bootstrap
+		dialer := websocket.Dialer{
+			Proxy:             http.ProxyFromEnvironment,
+			HandshakeTimeout:  15 * time.Second,
+			EnableCompression: false,
+		}
+
+		conn, resp, err := dialer.Dial(backendWS, nil)
 		if err != nil {
-			log.Println("[provider] WS connect failed; retrying in 3s:", err)
-			time.Sleep(3 * time.Second)
+			if resp != nil {
+				body, _ := io.ReadAll(resp.Body)
+				_ = resp.Body.Close()
+				log.Printf("[provider] Dial failed: %v (status=%d) body=%s", err, resp.StatusCode, string(body))
+			} else {
+				log.Println("[provider] Dial failed:", err)
+			}
+			time.Sleep(reconnectDelay)
 			continue
 		}
-		log.Println("[provider] WS connected")
-		_ = conn.WriteMessage(websocket.TextMessage, []byte("id|"+peerID))
 
-		// Connection health monitoring
-		lastActivity := time.Now()
+		handleProviderConnection(conn, peerID)
+		log.Println("[provider] Reconnecting in", reconnectDelay)
+		time.Sleep(reconnectDelay)
+	}
+}
 
-		// Ping every 3 minutes to detect stale connections
-		pingTicker := time.NewTicker(3 * time.Minute)
-		go func() {
-			defer pingTicker.Stop()
-			for range pingTicker.C {
-				// If no activity for 5+ minutes, connection might be stale
-				if time.Since(lastActivity) > 5*time.Minute {
-					log.Printf("[provider] Connection inactive for %v, testing with ping...", time.Since(lastActivity))
-					if err := conn.WriteMessage(websocket.PingMessage, []byte("health-check")); err != nil {
-						log.Printf("[provider] Health check ping failed: %v - forcing reconnect", err)
-						conn.Close()
-						return
-					}
-				}
-			}
-		}()
+func handleProviderConnection(conn *websocket.Conn, peerID string) {
+	defer conn.Close()
 
-		// Handle pong responses
-		conn.SetPongHandler(func(string) error {
-			lastActivity = time.Now()
-			log.Printf("[provider] Connection health confirmed via pong")
-			return nil
-		})
+	// Register with peer ID
+	_ = conn.WriteMessage(websocket.TextMessage, []byte("id|"+peerID))
+	log.Println("[provider] Connected to backend as", peerID)
 
-	messageLoop:
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				log.Println("[provider] WS lost; reconnecting:", err)
-				break messageLoop
-			}
-
-			// Update activity timestamp
-			lastActivity = time.Now()
-			text := string(msg)
-			switch {
-			case strings.HasPrefix(text, "hb|"):
-				// cheap heartbeat: echo nonce for RTT
-				nonce := strings.TrimPrefix(text, "hb|")
-				if err := conn.WriteMessage(websocket.TextMessage, []byte("hb|"+nonce)); err != nil {
-					log.Println("[provider] Failed to send heartbeat:", err)
-					break messageLoop
-				}
-
-			case text == "ping":
-				handlePing(conn)
-
-			case strings.HasPrefix(text, "pin|"):
-				handlePin(conn, strings.TrimPrefix(text, "pin|"))
-
-			case strings.HasPrefix(text, "unpin|"):
-				handleUnpin(conn, strings.TrimPrefix(text, "unpin|"))
-			}
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("[provider] Read error:", err)
+			break
 		}
 
-		pingTicker.Stop()
-		_ = conn.Close()
-		time.Sleep(5 * time.Second)
+		text := string(msg)
+		switch {
+		case strings.HasPrefix(text, "hb|"):
+			// cheap heartbeat: echo nonce for RTT
+			nonce := strings.TrimPrefix(text, "hb|")
+			if err := conn.WriteMessage(websocket.TextMessage, []byte("hb|"+nonce)); err != nil {
+				log.Println("[provider] Failed to send heartbeat:", err)
+				return
+			}
+
+		case text == "ping":
+			handlePing(conn)
+
+		case strings.HasPrefix(text, "pin|"):
+			handlePin(conn, strings.TrimPrefix(text, "pin|"))
+
+		case strings.HasPrefix(text, "unpin|"):
+			handleUnpin(conn, strings.TrimPrefix(text, "unpin|"))
+		}
 	}
 }
 
