@@ -17,8 +17,6 @@
 //   GOOS=linux  GOARCH=amd64 go build -o provider-listener .
 //
 // Runtime ENV (all optional):
-//   BACKEND_HTTP_URL   (default "http://localhost:3001")
-//   BACKEND_WS_URL     (default "ws://localhost:9090")
 //   IPFS_BIN           (default "ipfs")
 //   DELETE_TOKEN_AFTER (default "false")
 //
@@ -48,8 +46,8 @@ import (
 )
 
 // ---------- Config ----------
-var backendHTTP = getenv("BACKEND_HTTP_URL", "http://localhost:3001")
-var backendWS = getenv("BACKEND_WS_URL", "ws://localhost:9090")
+var backendHTTP = getenv("BACKEND_HTTP_URL", "https://elevenfire.azurewebsites.net")
+var backendWS = getenv("BACKEND_WS_URL", "wss://elevenfire.azurewebsites.net/ws/provider")
 var ipfsBin = getenv("IPFS_BIN", "ipfs")
 var deleteTokenAfterClaim = strings.EqualFold(getenv("DELETE_TOKEN_AFTER", "false"), "true")
 
@@ -58,10 +56,10 @@ func main() {
 
 	// 1) Load one-time provider claim token
 	tokenPath := filepath.Join(exeDir, "provider.token")
-	token, err := readOneLine(tokenPath)
-	if err != nil {
-		fatal("Missing provider.token:\n" + err.Error())
-	}
+	// token, err := readOneLine(tokenPath)
+	// if err != nil {
+	// 	fatal("Missing provider.token:\n" + err.Error())
+	// }
 
 	// 2) Discover local IPFS peerId (Kubo daemon must be running)
 	peerID, err := getPeerID()
@@ -70,11 +68,16 @@ func main() {
 	}
 	log.Println("[provider] Local PeerID:", peerID)
 
-	// 3) Claim with backend over HTTP (binds this peerId to your user)
-	if err := claimPeerID(token, peerID); err != nil {
-		fatal("PeerID claim failed: " + err.Error())
+	// 2.1) Test IPFS daemon responsiveness
+	if err := testIPFSConnection(); err != nil {
+		log.Printf("[provider] Warning: IPFS daemon may be slow: %v", err)
 	}
-	log.Println("[provider] PeerID claimed successfully")
+
+	// 3) Claim with backend over HTTP (binds this peerId to your user)
+	// if err := claimPeerID(token, peerID); err != nil {
+	// 	fatal("PeerID claim failed: " + err.Error())
+	// }
+	// log.Println("[provider] PeerID claimed successfully")
 
 	if deleteTokenAfterClaim {
 		_ = os.Remove(tokenPath)
@@ -118,18 +121,27 @@ func connectWSAndServe(peerID string) {
 		log.Println("[provider] WS connected")
 		_ = conn.WriteMessage(websocket.TextMessage, []byte("id|"+peerID))
 
+		// Set read deadline for detecting stale connections
+		conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
+
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("[provider] WS lost; reconnecting:", err)
 				break
 			}
+
+			// Reset read deadline on each message
+			conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
 			text := string(msg)
 			switch {
 			case strings.HasPrefix(text, "hb|"):
 				// cheap heartbeat: echo nonce for RTT
 				nonce := strings.TrimPrefix(text, "hb|")
-				_ = conn.WriteMessage(websocket.TextMessage, []byte("hb|"+nonce))
+				if err := conn.WriteMessage(websocket.TextMessage, []byte("hb|"+nonce)); err != nil {
+					log.Println("[provider] Failed to send heartbeat:", err)
+					break
+				}
 
 			case text == "ping":
 				handlePing(conn)
@@ -166,25 +178,46 @@ func handlePing(conn *websocket.Conn) {
 }
 
 func handlePin(conn *websocket.Conn, cid string) {
-    log.Println("Pinning:", cid)
-    // pin fetches blocks itself; --timeout prevents indefinite stalls
-    out, err := exec.Command(ipfsBin, "pin", "add", "--recursive", "--progress", "--timeout=5m", cid).CombinedOutput()
-    if err != nil {
-        _ = conn.WriteMessage(websocket.TextMessage, []byte("Error: "+strings.TrimSpace(string(out))))
-        return
-    }
-    _ = conn.WriteMessage(websocket.TextMessage, []byte("Success: "+strings.TrimSpace(string(out))))
+	log.Printf("[provider] Pinning CID: %s", cid)
+
+	// Reduce timeout to 3m to ensure backend doesn't timeout first (backend: 5m)
+	cmd := exec.Command(ipfsBin, "pin", "add", "--recursive", "--timeout=3m", cid)
+	out, err := cmd.CombinedOutput()
+
+	if err != nil {
+		errorMsg := strings.TrimSpace(string(out))
+		if errorMsg == "" {
+			errorMsg = err.Error()
+		}
+		log.Printf("[provider] Pin failed for %s: %s", cid, errorMsg)
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("Error: "+errorMsg))
+		return
+	}
+
+	log.Printf("[provider] Pin successful for %s", cid)
+	_ = conn.WriteMessage(websocket.TextMessage, []byte("Success: "+strings.TrimSpace(string(out))))
 }
 
 func handleUnpin(conn *websocket.Conn, cid string) {
-    log.Println("Unpinning:", cid)
-    out, err := exec.Command(ipfsBin, "pin", "rm", "--timeout=2m", cid).CombinedOutput()
-    if err != nil {
-        _ = conn.WriteMessage(websocket.TextMessage, []byte("Error: "+strings.TrimSpace(string(out))))
-        return
-    }
-    _ = conn.WriteMessage(websocket.TextMessage, []byte("Success: "+strings.TrimSpace(string(out))))
+	log.Printf("[provider] Unpinning CID: %s", cid)
+
+	cmd := exec.Command(ipfsBin, "pin", "rm", "--timeout=1m", cid)
+	out, err := cmd.CombinedOutput()
+
+	if err != nil {
+		errorMsg := strings.TrimSpace(string(out))
+		if errorMsg == "" {
+			errorMsg = err.Error()
+		}
+		log.Printf("[provider] Unpin failed for %s: %s", cid, errorMsg)
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("Error: "+errorMsg))
+		return
+	}
+
+	log.Printf("[provider] Unpin successful for %s", cid)
+	_ = conn.WriteMessage(websocket.TextMessage, []byte("Success: "+strings.TrimSpace(string(out))))
 }
+
 // ---------- Helpers ----------
 func readOneLine(path string) (string, error) {
 	b, err := os.ReadFile(path)
@@ -208,6 +241,25 @@ func getPeerID() (string, error) {
 		return "", errors.New("empty PeerID from 'ipfs id'")
 	}
 	return peerID, nil
+}
+
+func testIPFSConnection() error {
+	// Quick test of IPFS daemon responsiveness with 5s timeout
+	cmd := exec.Command(ipfsBin, "version")
+	cmd.Dir = "/"
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := cmd.Output()
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("IPFS daemon not responding within 5s")
+	}
 }
 
 func mustExeDir() string {
