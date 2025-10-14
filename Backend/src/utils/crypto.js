@@ -29,21 +29,39 @@ export function encryptEnvelopeGCM(plain, key, fileContext = null) {
 
     // Emit encryption event if file context is provided
     if (fileContext) {
-      emitFileEncrypted(fileContext, {
-        algorithm: algo,
-        keySize: key.length * 8,
-        ivSize: iv.length,
-        originalSize: plain.length,
-        encryptedSize: envelope.length,
-        encryptionTime: encryptionTime,
-        compressionRatio: envelope.length / plain.length,
-      });
+      emitFileEncrypted(
+        fileContext.filename,
+        fileContext.fileSize,
+        fileContext.username,
+        fileContext.userId,
+        fileContext.swarmId,
+        fileContext.swarmName,
+        fileContext.description || `File encrypted using ${algo}`,
+        {
+          algorithm: algo,
+          keySize: key.length * 8,
+          ivSize: iv.length,
+          originalSize: plain.length,
+          encryptedSize: envelope.length,
+          encryptionTime: encryptionTime,
+          compressionRatio: envelope.length / plain.length,
+        }
+      );
     }
 
     return envelope;
   } catch (e) {
     if (fileContext) {
-      emitFileEncryptionFailed(fileContext, e);
+      emitFileEncryptionFailed(
+        fileContext.filename,
+        fileContext.fileSize,
+        fileContext.username,
+        fileContext.userId,
+        fileContext.swarmId,
+        fileContext.swarmName,
+        fileContext.description || "File encryption failed",
+        e
+      );
     }
     throw e;
   }
@@ -73,14 +91,23 @@ export function decryptEnvelopeGCM(envelope, key, fileContext = null) {
 
       // Emit decryption event if file context is provided
       if (fileContext) {
-        emitFileDecrypted(fileContext, {
-          algorithm: algo,
-          keySize: key.length * 8,
-          encryptedSize: envelope.length,
-          decryptedSize: decrypted.length,
-          decryptionTime: decryptionTime,
-          wasEncrypted: true,
-        });
+        emitFileDecrypted(
+          fileContext.filename,
+          fileContext.fileSize,
+          fileContext.username,
+          fileContext.userId,
+          fileContext.swarmId,
+          fileContext.swarmName,
+          fileContext.description || `File decrypted using ${algo}`,
+          {
+            algorithm: algo,
+            keySize: key.length * 8,
+            encryptedSize: envelope.length,
+            decryptedSize: decrypted.length,
+            decryptionTime: decryptionTime,
+            wasEncrypted: true,
+          }
+        );
       }
 
       return decrypted;
@@ -88,17 +115,35 @@ export function decryptEnvelopeGCM(envelope, key, fileContext = null) {
 
     // legacy plaintext (pre-encryption) → return as-is
     if (fileContext) {
-      emitFileDecrypted(fileContext, {
-        wasEncrypted: false,
-        decryptionTime: 0,
-        message: "File was not encrypted (legacy plaintext)",
-      });
+      emitFileDecrypted(
+        fileContext.filename,
+        fileContext.fileSize,
+        fileContext.username,
+        fileContext.userId,
+        fileContext.swarmId,
+        fileContext.swarmName,
+        "File was not encrypted (legacy plaintext)",
+        {
+          wasEncrypted: false,
+          decryptionTime: 0,
+          message: "File was not encrypted (legacy plaintext)",
+        }
+      );
     }
 
     return envelope;
   } catch (error) {
     if (fileContext) {
-      emitFileDecryptionFailed(fileContext, error);
+      emitFileDecryptionFailed(
+        fileContext.filename,
+        fileContext.fileSize,
+        fileContext.username,
+        fileContext.userId,
+        fileContext.swarmId,
+        fileContext.swarmName,
+        fileContext.description || "File decryption failed",
+        error
+      );
     }
     throw error;
   }

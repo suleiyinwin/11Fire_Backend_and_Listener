@@ -181,34 +181,58 @@ export function emitFileDeleted(fileData, deleterData, swarmData) {
   });
 }
 
-export function emitFileEncrypted(fileData, encryptionInfo) {
+export function emitFileEncrypted(filename, fileSize, username, userId, swarmId, swarmName, description, encryptionInfo) {
   backendEvents.emit(EVENT_TYPES.FILE_ENCRYPTED, {
-    file: fileData,
+    filename,
+    fileSize,
+    username,
+    userId,
+    swarmId,
+    swarmName,
+    description,
     encryption: encryptionInfo,
     timestamp: Date.now(),
   });
 }
 
-export function emitFileDecrypted(fileData, decryptionInfo) {
+export function emitFileDecrypted(filename, fileSize, username, userId, swarmId, swarmName, description, decryptionInfo) {
   backendEvents.emit(EVENT_TYPES.FILE_DECRYPTED, {
-    file: fileData,
+    filename,
+    fileSize,
+    username,
+    userId,
+    swarmId,
+    swarmName,
+    description,
     decryption: decryptionInfo,
     timestamp: Date.now(),
   });
 }
 
-export function emitFileEncryptionFailed(fileData, error) {
+export function emitFileEncryptionFailed(filename, fileSize, username, userId, swarmId, swarmName, description, error) {
   backendEvents.emit(EVENT_TYPES.FILE_ENCRYPTION_FAILED, {
-    file: fileData,
-    error: error.message,
+    filename,
+    fileSize,
+    username,
+    userId,
+    swarmId,
+    swarmName,
+    description,
+    error: error.message || error,
     timestamp: Date.now(),
   });
 }
 
-export function emitFileDecryptionFailed(fileData, error) {
+export function emitFileDecryptionFailed(filename, fileSize, username, userId, swarmId, swarmName, description, error) {
   backendEvents.emit(EVENT_TYPES.FILE_DECRYPTION_FAILED, {
-    file: fileData,
-    error: error.message,
+    filename,
+    fileSize,
+    username,
+    userId,
+    swarmId,
+    swarmName,
+    description,
+    error: error.message || error,
     timestamp: Date.now(),
   });
 }
