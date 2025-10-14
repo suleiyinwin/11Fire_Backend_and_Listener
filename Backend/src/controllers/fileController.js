@@ -207,7 +207,7 @@ export async function uploadAndReplicate(req, res) {
       const providerIds = chosen
         .map((p) => p.userId || p.peerId)
         .filter(Boolean);
-      emitProviderToPin(cid, providerIds, user.activeSwarm, fileName, user.username);
+      emitProviderToPin(cid, providerIds, user.activeSwarm, fileName, user.username, user._id);
     } catch (e) {
       console.warn("emitProviderToPin error:", e?.message || e);
     }
@@ -447,7 +447,7 @@ export async function deleteFile(req, res) {
     // Unpin from all providers
     const swarmId = fileDoc.swarm;
     //Emit Unpin Provider
-    emitProviderToUnpin(cid, fileDoc.storedIds, swarmId, fileDoc.name, user.username);
+    emitProviderToUnpin(cid, fileDoc.storedIds, swarmId, fileDoc.name, user.username, user._id);
     const providers = await getOnlineProvidersForSwarm(swarmId);
     for (const p of providers) {
       try {
@@ -676,7 +676,7 @@ export async function deleteMultipleFiles(req, res) {
         const swarmId = fileDoc.swarm;
         
         // Emit unpin event
-        emitProviderToUnpin(cid, fileDoc.storedIds, swarmId, fileDoc.name, user.username);
+        emitProviderToUnpin(cid, fileDoc.storedIds, swarmId, fileDoc.name, user.username, user._id);
         
         const providers = await getOnlineProvidersForSwarm(swarmId);
 
