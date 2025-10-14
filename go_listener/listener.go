@@ -121,18 +121,43 @@ func connectWSAndServe(peerID string) {
 		log.Println("[provider] WS connected")
 		_ = conn.WriteMessage(websocket.TextMessage, []byte("id|"+peerID))
 
-		// Set read deadline for detecting stale connections
-		conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
+		// Connection health monitoring
+		lastActivity := time.Now()
 
+		// Ping every 3 minutes to detect stale connections
+		pingTicker := time.NewTicker(3 * time.Minute)
+		go func() {
+			defer pingTicker.Stop()
+			for range pingTicker.C {
+				// If no activity for 5+ minutes, connection might be stale
+				if time.Since(lastActivity) > 5*time.Minute {
+					log.Printf("[provider] Connection inactive for %v, testing with ping...", time.Since(lastActivity))
+					if err := conn.WriteMessage(websocket.PingMessage, []byte("health-check")); err != nil {
+						log.Printf("[provider] Health check ping failed: %v - forcing reconnect", err)
+						conn.Close()
+						return
+					}
+				}
+			}
+		}()
+
+		// Handle pong responses
+		conn.SetPongHandler(func(string) error {
+			lastActivity = time.Now()
+			log.Printf("[provider] Connection health confirmed via pong")
+			return nil
+		})
+
+	messageLoop:
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("[provider] WS lost; reconnecting:", err)
-				break
+				break messageLoop
 			}
 
-			// Reset read deadline on each message
-			conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
+			// Update activity timestamp
+			lastActivity = time.Now()
 			text := string(msg)
 			switch {
 			case strings.HasPrefix(text, "hb|"):
@@ -140,7 +165,7 @@ func connectWSAndServe(peerID string) {
 				nonce := strings.TrimPrefix(text, "hb|")
 				if err := conn.WriteMessage(websocket.TextMessage, []byte("hb|"+nonce)); err != nil {
 					log.Println("[provider] Failed to send heartbeat:", err)
-					break
+					break messageLoop
 				}
 
 			case text == "ping":
@@ -154,6 +179,7 @@ func connectWSAndServe(peerID string) {
 			}
 		}
 
+		pingTicker.Stop()
 		_ = conn.Close()
 		time.Sleep(5 * time.Second)
 	}
@@ -180,7 +206,15 @@ func handlePing(conn *websocket.Conn) {
 func handlePin(conn *websocket.Conn, cid string) {
 	log.Printf("[provider] Pinning CID: %s", cid)
 
-	// Reduce timeout to 3m to ensure backend doesn't timeout first (backend: 5m)
+	// Quick IPFS health check - if this fails after 5+ minutes, IPFS daemon is likely stuck
+	healthCmd := exec.Command(ipfsBin, "version")
+	if _, err := healthCmd.CombinedOutput(); err != nil {
+		log.Printf("[provider] IPFS daemon health check failed: %v", err)
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("Error: IPFS daemon unresponsive"))
+		return
+	}
+
+	// 3 minute timeout for provider pin operations
 	cmd := exec.Command(ipfsBin, "pin", "add", "--recursive", "--timeout=3m", cid)
 	out, err := cmd.CombinedOutput()
 
