@@ -5,9 +5,9 @@ import { upsertMembershipForUser } from "../utils/membershipUtils.js";
 import { generateProviderClaimForUser } from "../utils/providerClaim.js";
 import { setQuotaForActiveSwarm } from "../utils/membershipUtils.js";
 import { bytesToGb } from "../utils/units.js";
-import { ResponseMode } from '@azure/msal-node';
+import { ResponseMode } from "@azure/msal-node";
+import jwt from "jsonwebtoken";
 import { calculateAndEmitStorageMetrics } from "../utils/eventSystem.js";
-
 
 const BASE_SCOPES = ["openid", "profile", "email"];
 
@@ -18,26 +18,28 @@ export async function initSession(req, res) {
     const cookieOptions = {
       httpOnly: true,
       secure: true,
-      sameSite: 'none',
-      path: '/',
+      sameSite: "none",
+      path: "/",
       maxAge: 60000, // 1 minute
     };
-    
+
     // Only add domain if it's a valid non-empty string
     if (process.env.COOKIE_DOMAIN && process.env.COOKIE_DOMAIN.trim()) {
       cookieOptions.domain = process.env.COOKIE_DOMAIN.trim();
     }
-    
-    res.cookie('safari_init', 'true', cookieOptions);
-    
-    res.json({ 
-      message: 'Session initialized', 
-      domain: req.get('host'),
-      origin: req.get('origin'),
-      userAgent: req.get('user-agent')?.includes('Safari') ? 'Safari detected' : 'Other browser'
+
+    res.cookie("safari_init", "true", cookieOptions);
+
+    res.json({
+      message: "Session initialized",
+      domain: req.get("host"),
+      origin: req.get("origin"),
+      userAgent: req.get("user-agent")?.includes("Safari")
+        ? "Safari detected"
+        : "Other browser",
     });
   } catch (err) {
-    res.status(500).json({ error: 'Session initialization failed' });
+    res.status(500).json({ error: "Session initialization failed" });
   }
 }
 
@@ -45,26 +47,26 @@ export async function initSession(req, res) {
 export async function testCookies(req, res) {
   try {
     // Set a test cookie
-    res.cookie('test_cookie', 'test_value', {
+    res.cookie("test_cookie", "test_value", {
       httpOnly: false, // Make it readable by JS for testing
       secure: true,
-      sameSite: 'none',
-      path: '/',
+      sameSite: "none",
+      path: "/",
       maxAge: 60000, // 1 minute
     });
-    
+
     res.json({
-      message: 'Test cookie set',
+      message: "Test cookie set",
       receivedCookies: req.cookies,
       headers: {
-        userAgent: req.get('user-agent'),
-        origin: req.get('origin'),
-        referer: req.get('referer'),
-        host: req.get('host'),
-      }
+        userAgent: req.get("user-agent"),
+        origin: req.get("origin"),
+        referer: req.get("referer"),
+        host: req.get("host"),
+      },
     });
   } catch (err) {
-    res.status(500).json({ error: 'Cookie test failed' });
+    res.status(500).json({ error: "Cookie test failed" });
   }
 }
 
@@ -72,23 +74,26 @@ export async function startLogin(req, res, next) {
   try {
     // Generate state for CSRF protection (required for Safari/Mobile)
     const state = Math.random().toString(36).substring(2, 15);
-    
+
+    const wantsJson = req.query.format === "json";
+    const finalState = wantsJson ? `${state}|json` : state;
+
     const url = await msalClient.getAuthCodeUrl({
       scopes: BASE_SCOPES,
       redirectUri: process.env.AZURE_REDIRECT_URI,
-      state: state, // Critical for Safari/Mobile browsers
-      prompt: 'select_account', // Better UX for multi-account scenarios
+      state: finalState, // Critical for Safari/Mobile browsers
+      prompt: "select_account", // Better UX for multi-account scenarios
       responseMode: ResponseMode.QUERY,
     });
-    
+
     // Store state in session for validation (optional but recommended)
-    res.cookie('oauth_state', state, {
+    res.cookie("oauth_state", state, {
       httpOnly: true,
       secure: true,
-      sameSite: 'none',
+      sameSite: "none",
       maxAge: 10 * 60 * 1000, // 10 minutes
     });
-    
+
     res.redirect(url);
   } catch (err) {
     next(err);
@@ -101,6 +106,9 @@ export async function callback(req, res, next) {
     if (!code)
       return res.status(400).json({ error: "Missing authorization code" });
 
+    const [originalState, format] = (state || '').split('|');
+    const wantsJson = format === 'json';
+    
     // Validate state parameter (CSRF protection)
     const storedState = req.cookies?.oauth_state;
     if (state && storedState && state !== storedState) {
@@ -108,7 +116,7 @@ export async function callback(req, res, next) {
     }
 
     // Clear the state cookie
-    res.clearCookie('oauth_state');
+    res.clearCookie("oauth_state");
 
     //exchange code for tokens and user info (idTokenClaims).
     const tokenResp = await msalClient.acquireTokenByCode({
@@ -143,21 +151,86 @@ export async function callback(req, res, next) {
       { upsert: true, new: true }
     );
 
+    const payload = {
+      uid: String(user._id),
+      ms: { oid: c.oid, tid: c.tid },
+      activeSwarm: user.activeSwarm || null,
+    };
+
     // try {
     //   await generateProviderClaimForUser(user._id);
     // } catch (e) {
     //   console.error("Failed to generate provider claim token:", e);
     // }
 
-    issueSession(res, {
-      uid: String(user._id),
-      ms: { oid: c.oid, tid: c.tid },
-      activeSwarm: user.activeSwarm || null,
-    });
+    const acceptsJson =
+      req.headers.accept?.includes("application/json") ||
+      req.query.format === "json" ||
+      req.headers["x-requested-with"] === "XMLHttpRequest";
 
-    return res.redirect(process.env.POST_LOGIN_REDIRECT || "/");
+    if (acceptsJson) {
+      // Return token for frontend to handle
+      const token = jwt.sign(payload, process.env.APP_JWT_SECRET, {
+        expiresIn: "12h",
+      });
+
+      return res.json({
+        success: true,
+        token: token,
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          activeSwarm: user.activeSwarm,
+          memberships: user.memberships,
+        },
+        redirectUrl: process.env.POST_LOGIN_REDIRECT || "/",
+      });
+    } else {
+      // Traditional cookie-based flow
+      issueSession(res, payload);
+      return res.redirect(process.env.POST_LOGIN_REDIRECT || "/");
+    }
   } catch (err) {
     next(err);
+  }
+}
+
+export async function refreshToken(req, res) {
+  try {
+    if (!req.user?.uid) return res.status(401).json({ error: "Unauthorized" });
+
+    // Get fresh user data
+    const user = await Auth.findById(req.user.uid).select(
+      "username email ms memberships activeSwarm"
+    );
+
+    if (!user) return res.status(401).json({ error: "User not found" });
+
+    // Generate new token
+    const payload = {
+      uid: String(user._id),
+      ms: user.ms,
+      activeSwarm: user.activeSwarm || null,
+    };
+
+    const token = jwt.sign(payload, process.env.APP_JWT_SECRET, {
+      expiresIn: "12h",
+    });
+
+    res.json({
+      success: true,
+      token: token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        activeSwarm: user.activeSwarm,
+        memberships: user.memberships,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Token refresh failed" });
   }
 }
 
@@ -178,7 +251,9 @@ export async function mintProviderClaimToken(req, res) {
     //   });
     // }
 
-    const { token, expiresAt } = await generateProviderClaimForUser(req.user.uid);
+    const { token, expiresAt } = await generateProviderClaimForUser(
+      req.user.uid
+    );
     return res.json({ token, expiresAt, alreadyExists: false });
   } catch (err) {
     console.error("mintProviderClaimToken failed:", err);
@@ -230,7 +305,12 @@ export async function setActiveSwarm(req, res, next) {
     const SwarmModel = (await import("../models/Swarm.js")).default;
     const swarm = await SwarmModel.findById(swarmId).select("name").lean();
 
-    res.json({ ok: true, activeSwarm: swarmId, swarmName: swarm?.name || null, role: mem.role });
+    res.json({
+      ok: true,
+      activeSwarm: swarmId,
+      swarmName: swarm?.name || null,
+      role: mem.role,
+    });
   } catch (err) {
     next(err);
   }
@@ -287,12 +367,15 @@ export async function setActiveSwarmQuota(req, res, next) {
     if (!user) return res.status(401).json({ error: "Unauthorized" });
 
     const result = await setQuotaForActiveSwarm(user, { quotaGB, quotaBytes });
-    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    if (!result.ok)
+      return res.status(result.status).json({ error: result.error });
 
     const m = result.membership;
 
     const SwarmModel = (await import("../models/Swarm.js")).default;
-    const swarm = await SwarmModel.findById(user.activeSwarm).select("name").lean();
+    const swarm = await SwarmModel.findById(user.activeSwarm)
+      .select("name")
+      .lean();
 
     await calculateAndEmitStorageMetrics(user.activeSwarm, "quota_set");
 
@@ -300,8 +383,8 @@ export async function setActiveSwarmQuota(req, res, next) {
       ok: true,
       swarmId: String(user.activeSwarm),
       swarmName: swarm?.name || null,
-      quotaBytes: m.quotaBytes,      
-      quotaGB: bytesToGb(m.quotaBytes),   
+      quotaBytes: m.quotaBytes,
+      quotaGB: bytesToGb(m.quotaBytes),
       role: m.role,
     });
   } catch (err) {
