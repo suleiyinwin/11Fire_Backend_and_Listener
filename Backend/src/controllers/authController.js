@@ -310,6 +310,7 @@ export async function setActiveSwarm(req, res, next) {
     const fromSwarm = previousActiveSwarm 
       ? await Swarm.findById(previousActiveSwarm).select("name").lean()
       : null;
+    const fromRole = previousActiveSwarm ? user.getMembership(previousActiveSwarm)?.role : null;
 
     user.activeSwarm = swarmId;
     await user.save();
@@ -319,8 +320,8 @@ export async function setActiveSwarm(req, res, next) {
     // Emit active swarm switched event
     emitSwarmActiveSwitched(
       { userId: String(user._id), username: user.username },
-      fromSwarm ? { swarmId: String(previousActiveSwarm), name: fromSwarm.name } : null,
-      { swarmId: swarmId, name: toSwarm.name }
+      fromSwarm ? { swarmId: String(previousActiveSwarm), name: fromSwarm.name, role: fromRole } : null,
+      { swarmId: swarmId, name: toSwarm.name, role: mem.role }
     );
 
     res.json({
@@ -349,6 +350,7 @@ export async function setActiveSwarmBackend(userId, swarmId) {
   const fromSwarm = previousActiveSwarm 
     ? await Swarm.findById(previousActiveSwarm).select("name").lean()
     : null;
+  const fromRole = previousActiveSwarm ? user.getMembership(previousActiveSwarm)?.role : null;
 
   user.activeSwarm = swarmId;
   await user.save();
@@ -358,8 +360,8 @@ export async function setActiveSwarmBackend(userId, swarmId) {
   // Emit active swarm switched event
   emitSwarmActiveSwitched(
     { userId: String(user._id), username: user.username },
-    fromSwarm ? { swarmId: String(previousActiveSwarm), name: fromSwarm.name } : null,
-    { swarmId: swarmId, name: toSwarm.name }
+    fromSwarm ? { swarmId: String(previousActiveSwarm), name: fromSwarm.name, role: fromRole } : null,
+    { swarmId: swarmId, name: toSwarm.name, role: mem.role }
   );
 
   return { activeSwarm: swarmId, role: mem.role };
