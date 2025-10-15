@@ -188,20 +188,12 @@ class EventHandlerService {
 
   handleProviderRegistered(data) {
     console.log("[EventHandler] Provider registered:", data);
-    simulatorService.broadcastSystemEvent(
-      "Provider Registered",
-      `Provider ${data.peerId} registered for user ${data.userId}`,
-      data
-    );
+    simulatorService.broadcastProviderRegistered(data);
   }
 
   handleProviderClaimed(data) {
     console.log("[EventHandler] Provider claimed:", data);
-    simulatorService.broadcastSystemEvent(
-      "Provider Claimed",
-      `Provider ${data.peerId} claimed by user ${data.userId}`,
-      data
-    );
+    simulatorService.broadcastProviderClaimed(data);
   }
 
   handleFileUploaded(data) {

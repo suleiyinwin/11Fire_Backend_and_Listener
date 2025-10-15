@@ -191,6 +191,7 @@ class SimulatorService extends EventEmitter {
     this.broadcast({
       type: "provider_connected",
       event: "Provider Connected",
+      userId: providerData.userId,
       providerId: providerData.peerId,
       username: providerData.username,
       swarms: providerData.swarms,
@@ -209,9 +210,34 @@ class SimulatorService extends EventEmitter {
     this.broadcast({
       type: "provider_disconnected",
       event: "Provider Disconnected",
+      userId: providerData.userId,
       providerId: providerData.peerId,
       username: providerData.username,
-      description: `Provider ${providerData.username} disconnected`,
+      reason: providerData.reason,
+      description: `Provider ${providerData.username} disconnected${providerData.reason ? ` (${providerData.reason})` : ''}`,
+    });
+  }
+
+  broadcastProviderRegistered(providerData) {
+    this.broadcast({
+      type: "provider_registered",
+      event: "Provider Registered",
+      userId: providerData.userId,
+      providerId: providerData.peerId,
+      username: providerData.username,
+      description: `Provider ${providerData.username} (${providerData.peerId}) registered for user ${providerData.userId}`,
+    });
+  }
+
+  broadcastProviderClaimed(providerData) {
+    this.broadcast({
+      type: "provider_claimed",
+      event: "Provider Claimed",
+      userId: providerData.userId,
+      providerId: providerData.peerId,
+      username: providerData.username,
+      hasToken: !!providerData.token,
+      description: `Provider ${providerData.username} (${providerData.peerId}) claimed by user ${providerData.userId}`,
     });
   }
 

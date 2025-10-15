@@ -97,6 +97,7 @@ export function emitSwarmLeft(userData, swarmData) {
 // Provider Events
 export function emitProviderConnected(providerData) {
   backendEvents.emit(EVENT_TYPES.PROVIDER_CONNECTED, {
+    userId: providerData.userId,
     peerId: providerData.peerId,
     username: providerData.username,
     swarms: providerData.swarms || [],
@@ -106,6 +107,7 @@ export function emitProviderConnected(providerData) {
 
 export function emitProviderDisconnected(providerData) {
   backendEvents.emit(EVENT_TYPES.PROVIDER_DISCONNECTED, {
+    userId: providerData.userId,
     peerId: providerData.peerId,
     username: providerData.username,
     reason: providerData.reason || "unknown",
@@ -113,18 +115,20 @@ export function emitProviderDisconnected(providerData) {
   });
 }
 
-export function emitProviderRegistered(userId, peerId) {
+export function emitProviderRegistered(userId, peerId, username) {
   backendEvents.emit(EVENT_TYPES.PROVIDER_REGISTERED, {
     userId,
     peerId,
+    username,
     timestamp: Date.now(),
   });
 }
 
-export function emitProviderClaimed(userId, peerId, token) {
+export function emitProviderClaimed(userId, peerId, username, token) {
   backendEvents.emit(EVENT_TYPES.PROVIDER_CLAIMED, {
     userId,
     peerId,
+    username,
     token: token ? "***" : null,
     timestamp: Date.now(),
   });
