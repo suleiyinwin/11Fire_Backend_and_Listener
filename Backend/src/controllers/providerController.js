@@ -37,7 +37,7 @@ export async function claimPeerId(req, res) {
     await userDoc.save();
 
     // Emit provider claimed event
-    emitProviderClaimed(String(userDoc._id), peerId, token);
+    emitProviderClaimed(String(userDoc._id), peerId, userDoc.username, token);
 
     return res.json({ ok: true, userId: String(userDoc._id) });
   } catch (err) {

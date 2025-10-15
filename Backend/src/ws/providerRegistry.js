@@ -68,8 +68,9 @@ export async function registerPeer(ws, peerId) {
   });
   byUserId.set(String(user._id), peerId);
 
-  emitProviderRegistered(String(user._id), peerId);
+  emitProviderRegistered(String(user._id), peerId, user.username);
   emitProviderConnected({
+    userId: String(user._id),
     peerId: peerId,
     username: user.username,
     swarms: user.memberships?.map((m) => m.swarm) || [],
@@ -77,6 +78,7 @@ export async function registerPeer(ws, peerId) {
 
   ws.on("close", async () => {
     emitProviderDisconnected({
+      userId: String(user._id),
       peerId: peerId,
       username: user.username,
       reason: "connection_closed",
