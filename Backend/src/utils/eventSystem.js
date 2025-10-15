@@ -109,11 +109,13 @@ export function emitSwarmActiveSwitched(userData, fromSwarmData, toSwarmData) {
     username: userData.username,
     fromSwarm: fromSwarmData ? {
       swarmId: fromSwarmData.swarmId,
-      name: fromSwarmData.name
+      name: fromSwarmData.name,
+      role: fromSwarmData.role
     } : null,
     toSwarm: {
       swarmId: toSwarmData.swarmId,
-      name: toSwarmData.name
+      name: toSwarmData.name,
+      role: toSwarmData.role
     },
     timestamp: Date.now(),
   });

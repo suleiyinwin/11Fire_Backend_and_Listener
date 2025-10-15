@@ -193,8 +193,8 @@ class SimulatorService extends EventEmitter {
       fromSwarm: data.fromSwarm,
       toSwarm: data.toSwarm,
       description: `${data.username} switched active group ${
-        data.fromSwarm ? `from "${data.fromSwarm.name}" ` : ''
-      }to "${data.toSwarm.name}"`,
+        data.fromSwarm ? `from "${data.fromSwarm.name}" (as ${data.fromSwarm.role}) ` : ''
+      }to "${data.toSwarm.name}" (as ${data.toSwarm.role})`,
     });
   }
 
