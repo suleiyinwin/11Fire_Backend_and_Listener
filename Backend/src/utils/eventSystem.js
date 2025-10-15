@@ -74,14 +74,22 @@ export function emitSwarmCreated(swarmData) {
   backendEvents.emit(EVENT_TYPES.SWARM_CREATED, {
     swarmId: swarmData.swarmId,
     name: swarmData.name,
-    creator: swarmData.creator,
+    creator: {
+      userId: swarmData.creator.userId,
+      username: swarmData.creator.username,
+      role: swarmData.creator.role
+    },
     timestamp: Date.now(),
   });
 }
 
 export function emitSwarmJoined(userData, swarmData) {
   backendEvents.emit(EVENT_TYPES.SWARM_JOINED, {
-    user: userData,
+    user: {
+      userId: userData.userId,
+      username: userData.username,
+      role: userData.role
+    },
     swarm: swarmData,
     timestamp: Date.now(),
   });

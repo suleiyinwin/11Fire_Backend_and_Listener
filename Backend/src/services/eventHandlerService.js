@@ -160,12 +160,13 @@ class EventHandlerService {
       swarmId: data.swarmId,
       name: data.name,
       creator: data.creator,
+      role: data.role,
     });
   }
 
   handleSwarmJoined(data) {
     console.log("[EventHandler] User joined swarm:", data);
-    simulatorService.broadcastSwarmJoined(data.user, data.swarm);
+    simulatorService.broadcastSwarmJoined(data.user, data.swarm, data.role);
   }
 
   handleSwarmLeft(data) {

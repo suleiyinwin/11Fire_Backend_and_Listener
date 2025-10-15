@@ -168,7 +168,7 @@ class SimulatorService extends EventEmitter {
       swarmId: swarmData.swarmId,
       swarmName: swarmData.name,
       creator: swarmData.creator,
-      description: `Group "${swarmData.name}" was created by ${swarmData.creator.username}`,
+      description: `Group "${swarmData.name}" was created by ${swarmData.creator.username} as ${swarmData.creator.role}`,
     });
   }
 
