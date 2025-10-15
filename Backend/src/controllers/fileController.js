@@ -428,6 +428,8 @@ export async function downloadFile(req, res) {
       {
         cid: cid,
         name: fileDoc.name,
+        size: plain.length, // decrypted size
+        storedIds: fileDoc.storedIds || []
       },
       {
         userId: user._id,

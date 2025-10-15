@@ -163,7 +163,12 @@ export function emitFileUploaded(fileData, uploaderData, swarmData) {
 
 export function emitFileDownloaded(fileData, downloaderData) {
   backendEvents.emit(EVENT_TYPES.FILE_DOWNLOADED, {
-    file: fileData,
+    file: {
+      cid: fileData.cid,
+      name: fileData.name,
+      size: fileData.size,
+      storedIds: fileData.storedIds || []
+    },
     downloader: downloaderData,
     timestamp: Date.now(),
   });
