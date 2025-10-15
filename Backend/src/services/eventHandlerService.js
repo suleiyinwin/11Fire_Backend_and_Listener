@@ -39,6 +39,7 @@ class EventHandlerService {
       this.handleSwarmJoined.bind(this)
     );
     this.addListener(EVENT_TYPES.SWARM_LEFT, this.handleSwarmLeft.bind(this));
+    this.addListener(EVENT_TYPES.SWARM_ACTIVE_SWITCHED, this.handleSwarmActiveSwitched.bind(this));
 
     // Provider Events
     this.addListener(
@@ -174,6 +175,11 @@ class EventHandlerService {
       `${data.user.username} left group "${data.swarm.name}"`,
       data
     );
+  }
+
+  handleSwarmActiveSwitched(data) {
+    console.log("[EventHandler] User switched active swarm:", data);
+    simulatorService.broadcastSwarmActiveSwitched(data);
   }
 
   handleProviderConnected(data) {

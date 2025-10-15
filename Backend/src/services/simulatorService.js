@@ -184,6 +184,20 @@ class SimulatorService extends EventEmitter {
     });
   }
 
+  broadcastSwarmActiveSwitched(data) {
+    this.broadcast({
+      type: "swarm_active_switched",
+      event: "Active Group Switched",
+      userId: data.userId,
+      username: data.username,
+      fromSwarm: data.fromSwarm,
+      toSwarm: data.toSwarm,
+      description: `${data.username} switched active group ${
+        data.fromSwarm ? `from "${data.fromSwarm.name}" ` : ''
+      }to "${data.toSwarm.name}"`,
+    });
+  }
+
   /**
    * Provider related events
    */

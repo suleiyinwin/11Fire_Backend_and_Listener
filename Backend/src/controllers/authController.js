@@ -1,4 +1,5 @@
 import Auth from "../models/Auth.js";
+import Swarm from "../models/Swarm.js";
 import { msalClient } from "../lib/msalClient.js";
 import { issueSession, updateSession, clearSession } from "../utils/session.js";
 import { upsertMembershipForUser } from "../utils/membershipUtils.js";
@@ -7,7 +8,7 @@ import { setQuotaForActiveSwarm } from "../utils/membershipUtils.js";
 import { bytesToGb } from "../utils/units.js";
 import { ResponseMode } from "@azure/msal-node";
 import jwt from "jsonwebtoken";
-import { calculateAndEmitStorageMetrics } from "../utils/eventSystem.js";
+import { calculateAndEmitStorageMetrics, emitSwarmActiveSwitched } from "../utils/eventSystem.js";
 
 const BASE_SCOPES = ["openid", "profile", "email"];
 
@@ -304,16 +305,28 @@ export async function setActiveSwarm(req, res, next) {
     if (!mem)
       return res.status(403).json({ error: "Not a member of this swarm" });
 
+    // Get current active swarm before switching
+    const previousActiveSwarm = user.activeSwarm;
+    const fromSwarm = previousActiveSwarm 
+      ? await Swarm.findById(previousActiveSwarm).select("name").lean()
+      : null;
+
     user.activeSwarm = swarmId;
     await user.save();
 
-    const SwarmModel = (await import("../models/Swarm.js")).default;
-    const swarm = await SwarmModel.findById(swarmId).select("name").lean();
+    const toSwarm = await Swarm.findById(swarmId).select("name").lean();
+
+    // Emit active swarm switched event
+    emitSwarmActiveSwitched(
+      { userId: String(user._id), username: user.username },
+      fromSwarm ? { swarmId: String(previousActiveSwarm), name: fromSwarm.name } : null,
+      { swarmId: swarmId, name: toSwarm.name }
+    );
 
     res.json({
       ok: true,
       activeSwarm: swarmId,
-      swarmName: swarm?.name || null,
+      swarmName: toSwarm?.name || null,
       role: mem.role,
     });
   } catch (err) {
@@ -331,8 +344,24 @@ export async function setActiveSwarmBackend(userId, swarmId) {
   const mem = user.getMembership(swarmId);
   if (!mem) throw new Error("Not a member of this swarm");
 
+  // Get current active swarm before switching
+  const previousActiveSwarm = user.activeSwarm;
+  const fromSwarm = previousActiveSwarm 
+    ? await Swarm.findById(previousActiveSwarm).select("name").lean()
+    : null;
+
   user.activeSwarm = swarmId;
   await user.save();
+
+  const toSwarm = await Swarm.findById(swarmId).select("name").lean();
+
+  // Emit active swarm switched event
+  emitSwarmActiveSwitched(
+    { userId: String(user._id), username: user.username },
+    fromSwarm ? { swarmId: String(previousActiveSwarm), name: fromSwarm.name } : null,
+    { swarmId: swarmId, name: toSwarm.name }
+  );
+
   return { activeSwarm: swarmId, role: mem.role };
 }
 

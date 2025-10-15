@@ -25,6 +25,7 @@ export const EVENT_TYPES = {
   SWARM_CREATED: "swarm:created", //Z
   SWARM_JOINED: "swarm:joined", //Z
   SWARM_LEFT: "swarm:left", //Z
+  SWARM_ACTIVE_SWITCHED: "swarm:active_switched",
 
   // Provider Events
   PROVIDER_CONNECTED: "provider:connected",
@@ -90,6 +91,22 @@ export function emitSwarmLeft(userData, swarmData) {
   backendEvents.emit(EVENT_TYPES.SWARM_LEFT, {
     user: userData,
     swarm: swarmData,
+    timestamp: Date.now(),
+  });
+}
+
+export function emitSwarmActiveSwitched(userData, fromSwarmData, toSwarmData) {
+  backendEvents.emit(EVENT_TYPES.SWARM_ACTIVE_SWITCHED, {
+    userId: userData.userId,
+    username: userData.username,
+    fromSwarm: fromSwarmData ? {
+      swarmId: fromSwarmData.swarmId,
+      name: fromSwarmData.name
+    } : null,
+    toSwarm: {
+      swarmId: toSwarmData.swarmId,
+      name: toSwarmData.name
+    },
     timestamp: Date.now(),
   });
 }
