@@ -113,6 +113,7 @@ const createSwarm = async (req, res) => {
       creator: {
         userId: req.user.uid,
         username: user.username,
+        role: role,
       },
     });
 
