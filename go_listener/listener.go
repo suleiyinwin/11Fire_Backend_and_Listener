@@ -207,8 +207,8 @@ func handlePin(conn *websocket.Conn, cid string) {
 		return
 	}
 
-	// 3 minute timeout for provider pin operations
-	cmd := exec.Command(ipfsBin, "pin", "add", "--recursive", "--timeout=3m", cid)
+	// 30 second timeout for provider pin operations (testing)
+	cmd := exec.Command(ipfsBin, "pin", "add", "--recursive", "--timeout=30s", cid)
 	out, err := cmd.CombinedOutput()
 
 	if err != nil {
@@ -228,7 +228,7 @@ func handlePin(conn *websocket.Conn, cid string) {
 func handleUnpin(conn *websocket.Conn, cid string) {
 	log.Printf("[provider] Unpinning CID: %s", cid)
 
-	cmd := exec.Command(ipfsBin, "pin", "rm", "--timeout=1m", cid)
+	cmd := exec.Command(ipfsBin, "pin", "rm", "--timeout=30s", cid)
 	out, err := cmd.CombinedOutput()
 
 	if err != nil {
