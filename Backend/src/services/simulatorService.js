@@ -299,6 +299,8 @@ class SimulatorService extends EventEmitter {
       file: {
         cid: fileData.cid,
         name: fileData.name,
+        size: fileData.size,
+        storedIds: fileData.storedIds || []
       },
       downloader: downloaderData,
       description: `File "${fileData.name}" downloaded by ${downloaderData.username}`,
