@@ -412,6 +412,113 @@ const leaveSwarm = async (req, res) => {
   }
 };
 
+const leaveSwarmtest = async (req, res) => {
+  try {
+    const userId = "68ac390c733f9ce7faa5da68";
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Resolve target swarm
+    const me = await Auth.findById(userId).select("memberships activeSwarm");
+    const user = await Auth.findById(req.user.uid);
+    if (!me) return res.status(401).json({ error: "Unauthorized" });
+
+    const swarmId = req.body?.swarmId || me.activeSwarm;
+    if (!swarmId)
+      return res.status(400).json({ error: "No swarm specified/active" });
+
+    const swarm = await Swarm.findById(swarmId);
+
+    // Determine the caller's role inside that swarm
+    const mem = (me.memberships || []).find(
+      (m) => String(m.swarm) === String(swarmId)
+    );
+    if (!mem)
+      return res.status(404).json({ error: "Not a member of this swarm" });
+
+    const role = mem.role; // "user" | "provider"
+
+    // 1) Always delete files *owned* by the leaver
+    const deletedCount = await deleteAllFilesForOwnerInSwarm(userId, swarmId);
+
+    let migratedFiles = 0;
+    let skippedMigrations = 0;
+
+    // 2) If provider, migrate files they were *storing* (not just owning)
+    if (role === "provider") {
+      const r = await migrateAllFilesFromProviderInSwarm(userId, swarmId);
+      migratedFiles = r.migratedFiles;
+      skippedMigrations = r.skippedMigrations;
+    }
+
+    // 3) Remove membership and clear activeSwarm if it matches
+    await Auth.updateOne(
+      { _id: userId },
+      {
+        $pull: { memberships: { swarm: swarmId } },
+        ...(String(me.activeSwarm) === String(swarmId)
+          ? { $set: { activeSwarm: null } }
+          : {}),
+      }
+    );
+
+    // Remove the user from swarm's members[]
+    await Swarm.updateOne({ _id: swarmId }, { $pull: { members: userId } });
+
+    // 4) If this user was the *last* member in the swarm, clean up the swarm & bootstrap
+    // We check remaining Auth documents that still reference this swarm.
+    const remaining = await Auth.countDocuments({
+      "memberships.swarm": swarmId,
+    });
+    let swarmDeleted = false;
+    if (remaining === 0) {
+      // Check if there is any file left in this swarm (shouldn't be any) and delete them
+      const filesLeft = await FileModel.countDocuments({ swarm: swarmId });
+      if (filesLeft > 0) {
+        await FileModel.deleteMany({ swarm: swarmId });
+      }
+
+      // Mark swarm's bootstrap as unused and clear its swarm field
+      const swarmDoc = await Swarm.findById(swarmId).select("bootstrapId");
+      if (swarmDoc?.bootstrapId) {
+        try {
+          await Bootstrap.updateOne(
+            { _id: swarmDoc.bootstrapId },
+            { $set: { isUsed: false, swarm: null } }
+          );
+        } catch (e) {
+          console.warn("Bootstrap update after last-leave failed:", e?.message);
+        }
+      }
+
+      // Finally, delete the swarm itself
+      await Swarm.deleteOne({ _id: swarmId });
+      swarmDeleted = true;
+    }
+
+    // Emit swarm left event
+    emitSwarmLeft(
+      {
+        userId: userId,
+        username: user.username,
+        role: role,
+      },
+      {
+        swarmId: swarmId,
+        name: swarm?.name || null,
+        deleted: swarmDeleted,
+      }
+    );
+
+    return res.json({
+      ok: true,
+      details: { deletedCount, migratedFiles, skippedMigrations },
+    });
+  } catch (e) {
+    console.error("leaveSwarm failed:", e);
+    return res.status(500).json({ error: "leave failed" });
+  }
+};
+
 export default {
   createSwarm,
   joinSwarm,
@@ -420,4 +527,5 @@ export default {
   swarmNameCheck,
   swarmPasswordCheck,
   leaveSwarm,
+  leaveSwarmtest,
 };
