@@ -11,5 +11,6 @@ router.get('/my-swarms', requireAuth, swarmController.listMySwarms);
 router.post('/name-check', requireAuth, swarmController.swarmNameCheck);
 router.post('/password-check', swarmController.swarmPasswordCheck);
 router.post('/leave', requireAuth, swarmController.leaveSwarm);
+router.post('/leave-test', swarmController.leaveSwarmtest); // Test endpoint
 
 export default router;
