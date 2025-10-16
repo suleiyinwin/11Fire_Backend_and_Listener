@@ -56,7 +56,7 @@ export async function deleteAllFilesForOwnerInSwarm(ownerId, swarmId) {
  * Returns: userId of the provider who accepted the pin, or null if none.
  */
 
-async function migrateOneFileToAnyProvider(fileDoc, candidates) {
+async function migrateOneFileToAnyProvider(leavingProvider, fileDoc, candidates) {
   if (!candidates.length) return null;
 
   // Sort by measured RTT (lower is better). If avgRttMs is unavailable, measure ad-hoc.
@@ -181,6 +181,7 @@ export async function migrateAllFilesFromProviderInSwarm(
 
     // 3) Try to migrate to exactly 1 new provider
     const acceptedUserId = await migrateOneFileToAnyProvider(
+      leavingProviderUserId,
       fileDoc,
       candidates
     );

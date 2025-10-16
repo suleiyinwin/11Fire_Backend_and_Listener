@@ -428,10 +428,13 @@ const leaveSwarmtest = async (req, res) => {
 
     const swarm = await Swarm.findById(swarmId);
 
+    console.log("Leaving swarm:", swarmId, swarm?.name);
+
     // Determine the caller's role inside that swarm
     const mem = (me.memberships || []).find(
       (m) => String(m.swarm) === String(swarmId)
     );
+    console.log("Membership record:", mem);
     if (!mem)
       return res.status(404).json({ error: "Not a member of this swarm" });
 
