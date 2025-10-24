@@ -234,7 +234,7 @@ export async function uploadAndReplicate(req, res) {
         size,
         encSize: envelope.length,
         date: new Date(),
-        isFile: true,
+        isFile: req.isFolder === true ? false : true,
         ownerId: user._id,
         storedIds: pinnedUserIds.map((id) => id),
         sharedIds: [],
@@ -342,11 +342,12 @@ export async function uploadFolder(req, res) {
     const fakeReq = {
       ...req,
       file: {
-        originalname: `${finalFolderName}.zip`,
+        originalname: finalFolderName,
         buffer: zipBuffer,
         mimetype: "application/zip",
         size: zipBuffer.length,
       },
+      isFolder: true,
     };
 
     // Use existing upload flow - encryption, replication, events, etc.
