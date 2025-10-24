@@ -79,8 +79,8 @@ async function migrateOneFileToAnyProvider(leavingProvider, fileDoc, candidates)
     try {
       // Emit replication started event
       emitReplicationStarted(
-        leavingProvider, // source provider (leaving)
-        { userId: c.userId, username: c.username || 'Unknown' }, // target provider
+        leavingProvider, // source provider (leaving) - now has username
+        { userId: c.userId, username: c.username }, // target provider - from enriched candidates
         { cid: fileDoc.cid, name: fileDoc.name, size: fileDoc.size },
         { swarmId: fileDoc.swarm }
       );
@@ -91,7 +91,7 @@ async function migrateOneFileToAnyProvider(leavingProvider, fileDoc, candidates)
         // Emit replication completed event
         emitReplicationCompleted(
           leavingProvider,
-          { userId: c.userId, username: c.username || 'Unknown' },
+          { userId: c.userId, username: c.username },
           { cid: fileDoc.cid, name: fileDoc.name, size: fileDoc.size }
         );
         return c.userId;
@@ -99,7 +99,7 @@ async function migrateOneFileToAnyProvider(leavingProvider, fileDoc, candidates)
         // Emit replication failed event
         emitReplicationFailed(
           leavingProvider,
-          { userId: c.userId, username: c.username || 'Unknown' },
+          { userId: c.userId, username: c.username },
           { cid: fileDoc.cid, name: fileDoc.name, size: fileDoc.size },
           new Error('Provider refused to pin the file')
         );
@@ -108,7 +108,7 @@ async function migrateOneFileToAnyProvider(leavingProvider, fileDoc, candidates)
       // Emit replication failed event
       emitReplicationFailed(
         leavingProvider,
-        { userId: c.userId, username: c.username || 'Unknown' },
+        { userId: c.userId, username: c.username },
         { cid: fileDoc.cid, name: fileDoc.name, size: fileDoc.size },
         error
       );
@@ -177,11 +177,11 @@ export async function migrateAllFilesFromProviderInSwarm(
     // 2) Build candidate list (online, not already storing this CID)
     const exclude = new Set(fileDoc.storedIds.map(String));
     exclude.add(String(leavingProviderUserId));
-    const candidates = online.filter((p) => !exclude.has(String(p.userId)));
+    const candidates = enrichedOnline.filter((p) => !exclude.has(String(p.userId)));
 
     // 3) Try to migrate to exactly 1 new provider
     const acceptedUserId = await migrateOneFileToAnyProvider(
-      leavingProviderUserId,
+      leavingProvider,
       fileDoc,
       candidates
     );
