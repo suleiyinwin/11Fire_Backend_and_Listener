@@ -57,10 +57,10 @@ func main() {
 
 	// 1) Load one-time provider claim token
 	tokenPath := filepath.Join(exeDir, "provider.token")
-	// token, err := readOneLine(tokenPath)
-	// if err != nil {
-	// 	fatal("Missing provider.token:\n" + err.Error())
-	// }
+	token, err := readOneLine(tokenPath)
+	if err != nil {
+		fatal("Missing provider.token:\n" + err.Error())
+	}
 
 	// 2) Discover local IPFS peerId (Kubo daemon must be running)
 	peerID, err := getPeerID()
@@ -75,10 +75,10 @@ func main() {
 	}
 
 	// 3) Claim with backend over HTTP (binds this peerId to your user)
-	// if err := claimPeerID(token, peerID); err != nil {
-	// 	fatal("PeerID claim failed: " + err.Error())
-	// }
-	// log.Println("[provider] PeerID claimed successfully")
+	if err := claimPeerID(token, peerID); err != nil {
+		fatal("PeerID claim failed: " + err.Error())
+	}
+	log.Println("[provider] PeerID claimed successfully")
 
 	if deleteTokenAfterClaim {
 		_ = os.Remove(tokenPath)
