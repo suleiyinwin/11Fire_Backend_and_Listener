@@ -16,6 +16,8 @@
 
 ## Architecture
 
+![11Fire Architecture](./images/11FireWBS.png)
+
 The system consists of three main components:
 
 ### 1. Backend API Server (`Backend/`)
