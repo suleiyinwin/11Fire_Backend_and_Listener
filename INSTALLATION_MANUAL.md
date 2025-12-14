@@ -252,8 +252,11 @@ git push origin main
 
 ## Connection to frontend
 
-1. Clone the frontend repo first.
+1. Clone the frontend repo first (https://github.com/naycmmkyaw/11Fire_frontend.git).
 2. Create .env for frontend. 
 3. Add backend endpoint in .env . 
 4. Run the project. 
 
+**OR**
+
+**You can use directly https://11-fire-frontend.vercel.app**
