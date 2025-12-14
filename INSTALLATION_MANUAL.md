@@ -7,9 +7,9 @@
 - **Disk Space**: At least 1GB free space
 - **OS**: macOS, Linux, or Windows 10/11
 
-### Production Server
+### Production Server 
 - **RAM**: Minimum 2GB (4GB recommended)
-- **CPU**: 2 cores minimum
+- **CPU**: 2 cores minimum ()
 - **Disk Space**: 10GB minimum
 - **OS**: Ubuntu 20.04/22.04 LTS or similar Linux distribution
 
